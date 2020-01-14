@@ -1,0 +1,127 @@
+*.BIPOLAR
+*.RESI = 2000
+*.SCALE METER
+*.MEGA
+*.RESVAL
+*.CAPVAL
+*.DIOPERI
+*.DIOAREA
+*.EQUATION
+.PARAM
+
+
+
+.SUBCKT nmos4_18 B D G S
+*.PININFO B:B D:B G:B S:B
+MM0 D G S B n2svt l=l nfin=w nf=nf m=1
+.ENDS
+
+.SUBCKT nmos4_svt B D G S
+*.PININFO B:B D:B G:B S:B
+MM0 D G S B n1svt l=l nfin=w nf=nf m=1
+.ENDS
+
+.SUBCKT nmos4_lvt B D G S
+*.PININFO B:B D:B G:B S:B
+MM0 D G S B n1lvt l=l nfin=w nf=nf m=1
+.ENDS
+
+.SUBCKT nmos4_hvt B D G S
+*.PININFO B:B D:B G:B S:B
+MM0 D G S B n1hvt l=l nfin=w nf=nf m=1
+.ENDS
+
+.SUBCKT nmos4_standard B D G S
+*.PININFO B:B D:B G:B S:B
+MM0 D G S B n1svt l=l nfin=w nf=nf m=1
+.ENDS
+
+.SUBCKT nmos4_fast B D G S
+*.PININFO B:B D:B G:B S:B
+MM0 D G S B n1lvt l=l nfin=w nf=nf m=1
+.ENDS
+
+.SUBCKT nmos4_low_power B D G S
+*.PININFO B:B D:B G:B S:B
+MM0 D G S B n1hvt l=l nfin=w nf=nf m=1
+.ENDS
+
+.SUBCKT pmos4_18 B D G S
+*.PININFO B:B D:B G:B S:B
+MM0 D G S B p2svt l=l nfin=w nf=nf m=1
+.ENDS
+
+.SUBCKT pmos4_svt B D G S
+*.PININFO B:B D:B G:B S:B
+MM0 D G S B p1svt l=l nfin=w nf=nf m=1
+.ENDS
+
+.SUBCKT pmos4_lvt B D G S
+*.PININFO B:B D:B G:B S:B
+MM0 D G S B p1lvt l=l nfin=w nf=nf m=1
+.ENDS
+
+.SUBCKT pmos4_hvt B D G S
+*.PININFO B:B D:B G:B S:B
+MM0 D G S B p1hvt l=l nfin=w nf=nf m=1
+.ENDS
+
+.SUBCKT pmos4_standard B D G S
+*.PININFO B:B D:B G:B S:B
+MM0 D G S B p1svt l=l nfin=w nf=nf m=1
+.ENDS
+
+.SUBCKT pmos4_fast B D G S
+*.PININFO B:B D:B G:B S:B
+MM0 D G S B p1lvt l=l nfin=w nf=nf m=1
+.ENDS
+
+.SUBCKT pmos4_low_power B D G S
+*.PININFO B:B D:B G:B S:B
+MM0 D G S B p1hvt l=l nfin=w nf=nf m=1
+.ENDS
+
+.SUBCKT res_metal_1 MINUS PLUS
+*.PININFO MINUS:B PLUS:B
+RR0 PLUS MINUS $[resm1]  l=l w=w r=0.0736*l/w
+.ENDS
+
+.SUBCKT res_metal_2 MINUS PLUS
+*.PININFO MINUS:B PLUS:B
+RR0 PLUS MINUS $[resm2]  l=l w=w r=0.0604*l/w
+.ENDS
+
+.SUBCKT res_metal_3 MINUS PLUS
+*.PININFO MINUS:B PLUS:B
+RR0 PLUS MINUS $[resm3]  l=l w=w r=0.0604*l/w
+.ENDS
+
+.SUBCKT res_metal_4 MINUS PLUS
+*.PININFO MINUS:B PLUS:B
+RR0 PLUS MINUS $[resm4]  l=l w=w r=0.0604*l/w
+.ENDS
+
+.SUBCKT res_metal_5 MINUS PLUS
+*.PININFO MINUS:B PLUS:B
+RR0 PLUS MINUS $[resm5]  l=l w=w r=0.0604*l/w
+.ENDS
+
+.SUBCKT res_metal_6 MINUS PLUS
+*.PININFO MINUS:B PLUS:B
+RR0 PLUS MINUS $[resm6]  l=l w=w r=0.0604*l/w
+.ENDS
+
+.SUBCKT res_metal_7 MINUS PLUS
+*.PININFO MINUS:B PLUS:B
+RR0 PLUS MINUS $[resm7]  l=l w=w r=0.0604*l/w
+.ENDS
+
+.SUBCKT res_metal_8 MINUS PLUS
+*.PININFO MINUS:B PLUS:B
+RR0 PLUS MINUS $[resmt]  l=l w=w r=0.0214*l/w
+.ENDS
+
+
+.SUBCKT PYTEST VDD VSS vin<3> vin<2> vin<1> vin<0> vout
+*.PININFO VDD:I VSS:I vin<3>:I vin<2>:I vin<1>:I vin<0>:I vout:O
+.ENDS

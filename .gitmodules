@@ -1,0 +1,3 @@
+[submodule "pybag"]
+	path = pybag
+	url = git@login1.bcanalog.com:BAG/pybag_release.git

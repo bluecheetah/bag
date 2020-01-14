@@ -1,0 +1,6 @@
+module: bag_test.layout.fill
+class: FillCenterTest
+params:
+  w: 12000
+  h: 15000
+  fill_layer: 3

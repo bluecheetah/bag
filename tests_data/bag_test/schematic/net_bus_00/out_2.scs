@@ -1,0 +1,131 @@
+simulator lang=spectre
+include "/mnt/tools/projects/erichang/cds_ff_mpt/ddr_cds_ff_mpt/cds_ff_mpt/netlist_setup/spectre_prim.scs"
+
+
+
+
+subckt nmos4_18 B D G S
+parameters l w nf
+MM0 D G S B cds_ff_mpt_n2svt l=l nfin=w nf=nf m=1
+ends nmos4_18
+
+subckt nmos4_svt B D G S
+parameters l w nf
+MM0 D G S B cds_ff_mpt_n1svt l=l nfin=w nf=nf m=1
+ends nmos4_svt
+
+subckt nmos4_lvt B D G S
+parameters l w nf
+MM0 D G S B cds_ff_mpt_n1lvt l=l nfin=w nf=nf m=1
+ends nmos4_lvt
+
+subckt nmos4_hvt B D G S
+parameters l w nf
+MM0 D G S B cds_ff_mpt_n1hvt l=l nfin=w nf=nf m=1
+ends nmos4_hvt
+
+subckt nmos4_standard B D G S
+parameters l w nf
+MM0 D G S B cds_ff_mpt_n1svt l=l nfin=w nf=nf m=1
+ends nmos4_standard
+
+subckt nmos4_fast B D G S
+parameters l w nf
+MM0 D G S B cds_ff_mpt_n1lvt l=l nfin=w nf=nf m=1
+ends nmos4_fast
+
+subckt nmos4_low_power B D G S
+parameters l w nf
+MM0 D G S B cds_ff_mpt_n1hvt l=l nfin=w nf=nf m=1
+ends nmos4_low_power
+
+subckt pmos4_18 B D G S
+parameters l w nf
+MM0 D G S B cds_ff_mpt_p2svt l=l nfin=w nf=nf m=1
+ends pmos4_18
+
+subckt pmos4_svt B D G S
+parameters l w nf
+MM0 D G S B cds_ff_mpt_p1svt l=l nfin=w nf=nf m=1
+ends pmos4_svt
+
+subckt pmos4_lvt B D G S
+parameters l w nf
+MM0 D G S B cds_ff_mpt_p1lvt l=l nfin=w nf=nf m=1
+ends pmos4_lvt
+
+subckt pmos4_hvt B D G S
+parameters l w nf
+MM0 D G S B cds_ff_mpt_p1hvt l=l nfin=w nf=nf m=1
+ends pmos4_hvt
+
+subckt pmos4_standard B D G S
+parameters l w nf
+MM0 D G S B cds_ff_mpt_p1svt l=l nfin=w nf=nf m=1
+ends pmos4_standard
+
+subckt pmos4_fast B D G S
+parameters l w nf
+MM0 D G S B cds_ff_mpt_p1lvt l=l nfin=w nf=nf m=1
+ends pmos4_fast
+
+subckt pmos4_low_power B D G S
+parameters l w nf
+MM0 D G S B cds_ff_mpt_p1hvt l=l nfin=w nf=nf m=1
+ends pmos4_low_power
+
+subckt res_metal_1 MINUS PLUS
+parameters l w
+RR0 PLUS MINUS cds_ff_mpt_resm1  l=l w=w
+ends res_metal_1
+
+subckt res_metal_2 MINUS PLUS
+parameters l w
+RR0 PLUS MINUS cds_ff_mpt_resm2  l=l w=w
+ends res_metal_2
+
+subckt res_metal_3 MINUS PLUS
+parameters l w
+RR0 PLUS MINUS cds_ff_mpt_resm3  l=l w=w
+ends res_metal_3
+
+subckt res_metal_4 MINUS PLUS
+parameters l w
+RR0 PLUS MINUS cds_ff_mpt_resm4  l=l w=w
+ends res_metal_4
+
+subckt res_metal_5 MINUS PLUS
+parameters l w
+RR0 PLUS MINUS cds_ff_mpt_resm5  l=l w=w
+ends res_metal_5
+
+subckt res_metal_6 MINUS PLUS
+parameters l w
+RR0 PLUS MINUS cds_ff_mpt_resm6  l=l w=w
+ends res_metal_6
+
+subckt res_metal_7 MINUS PLUS
+parameters l w
+RR0 PLUS MINUS cds_ff_mpt_resm7  l=l w=w
+ends res_metal_7
+
+subckt res_metal_8 MINUS PLUS
+parameters l w
+RR0 PLUS MINUS cds_ff_mpt_resm8  l=l w=w
+ends res_metal_8
+
+
+subckt pin_array_0_1 VDD VSS vin<3> vin<2> vin<1> vin<0> vout
+ends pin_array_0_1
+
+
+subckt pin_array_0 VDD VSS vin vout
+ends pin_array_0
+
+
+X0_3 VDD VSS vin mid<3> pin_array_0
+X0_2 VDD VSS vin mid<2> pin_array_0
+X0_1 VDD VSS vin mid<1> pin_array_0
+X0_0 VDD VSS vin mid<0> pin_array_0
+X1 VDD VSS mid<3> mid<2> mid<1> mid<0> vout pin_array_0_1
+

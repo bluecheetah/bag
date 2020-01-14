@@ -1,0 +1,4 @@
+# tests the case where top_cell_name is equal to the generator cell name of an instance.
+top_cell_name: pin_array_0
+params:
+  mult: 4

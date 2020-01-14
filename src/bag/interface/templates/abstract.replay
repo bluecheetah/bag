@@ -1,0 +1,27 @@
+absSkillMode()
+absDisableUpdate()
+absDeselectBinFrom("Core" "Core")
+absSelectBinFrom("Block" "Block")
+absEnableUpdate()
+absSetLibrary("{{ lib_name }}")
+
+absSetOption("ImportOptionsFile"  "{{ options_file }}")
+absImportOptions()
+
+absSetOption("SelectName"         "{{ cell_name }}")
+absSetOption("LEFLibraryName"     "{{ lib_name }}")
+absSetOption("ImportLogicalFiles" "{{ verilog_file }}")
+absSetOption("ImportVerilogFiles" "{{ verilog_file }}")
+absSetOption("ExportLEFFile"      "{{ lef_file }}")
+
+absImportLogical()
+
+absDeselectCells()
+absSelectCellFrom("{{ cell_name }}" "{{ cell_name }}")
+absSelect()
+
+absPins()
+absExtract()
+absAbstract()
+absExportLEF()
+absExit()
