@@ -733,7 +733,9 @@ class SimData:
         return self._netlist_type
 
     def __getitem__(self, item: str) -> np.ndarray:
-        return self._cur_ana[convert_cdba_name_bit(item, self._netlist_type)]
+        if item.endswith('>'):
+            item = convert_cdba_name_bit(item, self._netlist_type)
+        return self._cur_ana[item]
 
     def __contains__(self, item: str) -> bool:
         return item in self._cur_ana

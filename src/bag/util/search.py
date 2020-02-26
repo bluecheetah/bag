@@ -72,7 +72,8 @@ class BinaryIterator:
         This is only used when trying to find the upper bound.
     """
 
-    def __init__(self, low: int, high: Optional[int], step: int = 1, search_step: int = 1) -> None:
+    def __init__(self, low: int, high: Optional[int] = None, step: int = 1,
+                 search_step: int = 1) -> None:
         if not isinstance(low, int) or not isinstance(step, int):
             raise ValueError('low and step must be integers.')
 
@@ -81,8 +82,9 @@ class BinaryIterator:
         self._low = 0
         self._save_marker: Optional[int] = None
         self._save_info = None
-        self._slist: SortedList = SortedList()
         self._search_step = search_step
+        self._slist = SortedList()
+        self._sort_dir = 'unknown'
 
         if high is None:
             self._high: Optional[int] = None
@@ -111,10 +113,11 @@ class BinaryIterator:
         """Returns the next value to look at."""
         return self._current * self._step + self._offset
 
-    def up(self, val: Optional[float] = None, raise_exception: bool = True) -> None:
+    def up(self, val: Optional[float] = None) -> None:
         """Increment this iterator."""
         if val is not None:
-            self._check_monotonicity(val, raise_exception)
+            self._slist, self._sort_dir = _check_monotonicity(self._slist, self._sort_dir,
+                                                              self._current, val)
 
         self._low = self._current + 1
 
@@ -123,10 +126,11 @@ class BinaryIterator:
         else:
             self._current = 2 * self._current if self._current > 0 else self._search_step
 
-    def down(self, val: Optional[float] = None, raise_exception: bool = True) -> None:
+    def down(self, val: Optional[float] = None) -> None:
         """Decrement this iterator."""
         if val is not None:
-            self._check_monotonicity(val, raise_exception)
+            self._slist, self._sort_dir = _check_monotonicity(self._slist, self._sort_dir,
+                                                              self._current, val)
 
         self._high = self._current
         self._current = (self._low + self._high) // 2
@@ -147,34 +151,6 @@ class BinaryIterator:
     def get_last_save_info(self) -> Any:
         """Return last save information."""
         return self._save_info
-
-    def _check_monotonicity(self, val: float, raise_exception: bool = True) -> None:
-        item = (self._current, val)
-        self._slist.add(item)
-        idx = self._slist.index(item)
-
-        num_vals = len(self._slist)
-        if num_vals >= 3:
-            if idx == num_vals - 1:
-                mon_pos = (val >= self._slist[num_vals - 2][1] >= self._slist[num_vals - 3][1])
-                mon_neg = (val <= self._slist[num_vals - 2][1] <= self._slist[num_vals - 3][1])
-            elif idx == 0:
-                mon_pos = (val <= self._slist[1][1] <= self._slist[2][1])
-                mon_neg = (val >= self._slist[1][1] >= self._slist[2][1])
-            else:
-                mon_pos = (self._slist[idx - 1][1] <= val <= self._slist[idx + 1][1])
-                mon_neg = (self._slist[idx - 1][1] >= val >= self._slist[idx + 1][1])
-
-            if not (mon_pos or mon_neg):
-                msg = 'WARNING: binary iterator observed non-monotonic values.'
-                if raise_exception:
-                    raise RuntimeError(msg)
-                else:
-                    print(msg)
-                    print(f'Observed settings/values: {self._slist}')
-                    txt = input('Press enter to continue, or "debug" to enter debugger: ')
-                    if txt == 'debug':
-                        breakpoint()
 
 
 class FloatBinaryIterator:
@@ -200,7 +176,7 @@ class FloatBinaryIterator:
         upper bound, raise an error.
     """
 
-    def __init__(self, low: float, high: Optional[float],
+    def __init__(self, low: float, high: Optional[float] = None,
                  tol: float = 1.0, search_step: float = 1.0, max_err: float = float('inf')) -> None:
         self._offset = low
         self._tol = tol
@@ -209,6 +185,8 @@ class FloatBinaryIterator:
         self._search_step = search_step
         self._max_err = max_err
         self._save_marker: Optional[float] = None
+        self._slist = SortedList()
+        self._sort_dir = 'unknown'
 
         if high is not None:
             self._high = high - low
@@ -235,10 +213,13 @@ class FloatBinaryIterator:
         """Returns the next value to look at."""
         return self._current + self._offset
 
-    def up(self) -> None:
+    def up(self, val: Optional[float] = None) -> None:
         """Increment this iterator."""
         self._low = self._current
 
+        if val is not None:
+            self._slist, self._sort_dir = _check_monotonicity(self._slist, self._sort_dir,
+                                                              self._current, val)
         if self._high is not None:
             self._current = (self._low + self._high) / 2
         else:
@@ -250,9 +231,14 @@ class FloatBinaryIterator:
                 raise ValueError('Unbounded binary search '
                                  f'value = {self._current} > max_err = {self._max_err}')
 
-    def down(self) -> None:
+    def down(self, val: Optional[float] = None) -> None:
         """Decrement this iterator."""
         self._high = self._current
+
+        if val is not None:
+            self._slist, self._sort_dir = _check_monotonicity(self._slist, self._sort_dir,
+                                                              self._current, val)
+
         self._current = (self._low + self._high) / 2
 
     def save(self) -> None:
@@ -318,7 +304,7 @@ class FloatIntervalSearchHelper:
 class FloatIntervalSearch:
     _helper_table: Dict[float, FloatIntervalSearchHelper] = {}
 
-    def __init__(self, low: float, high: Optional[float], overhead_factor: float,
+    def __init__(self, low: float, high: Optional[float] = None, overhead_factor: float = 1,
                  tol: float = 1.0, search_step: float = 1.0, max_err: float = float('inf'),
                  guess: Optional[Union[float, Tuple[float, float]]] = None) -> None:
         self._tol = tol
@@ -326,6 +312,8 @@ class FloatIntervalSearch:
         self._high: float = float('inf') if high is None else high
         self._search_step = search_step
         self._max_err = max_err
+        self._slist = SortedList()
+        self._sort_dir = 'unknown'
 
         helper = self._helper_table.get(overhead_factor, None)
         if helper is None:
@@ -343,7 +331,8 @@ class FloatIntervalSearch:
         else:
             if guess[0] > guess[1] or guess[0] == float('inf') or guess[1] == float('inf'):
                 raise ValueError(f'Invalid range: {guess}')
-            self._guess_range = (max(self._low, guess[0] - tol), min(self._high, guess[1] + tol))
+            self._guess_range = tuple((max(self._low, guess[0] - tol),
+                                       min(self._high, guess[1] + tol)))
 
     @property
     def low(self) -> float:
@@ -355,7 +344,7 @@ class FloatIntervalSearch:
 
     def has_next(self) -> bool:
         """returns True if this iterator is not finished yet."""
-        return self._high - self._low > self._tol
+        return (self._high - self._low) > self._tol
 
     def get_sweep_specs(self) -> Dict[str, Any]:
         if self._guess_range is None:
@@ -397,9 +386,17 @@ class FloatIntervalSearch:
         else:
             return (self._low + self._high) / 2
 
-    def set_interval(self, low: float, high: Optional[float] = float('inf')) -> None:
+    def set_interval(self, low: float, high: Optional[float] = float('inf'),
+                     xy_vals: Optional[Iterable[Tuple[float, float]]] = None) -> None:
         if high is None:
             high = float('inf')
+
+        if xy_vals is not None:
+            import pdb
+            for x, y in xy_vals:
+                self._slist, self._sort_dir = _check_monotonicity(self._slist, self._sort_dir, x, y)
+                print(self._slist)
+                pdb.set_trace()
 
         if self._guess_range is not None:
             tol = self._tol
@@ -411,7 +408,7 @@ class FloatIntervalSearch:
                 self._guess_range = None
             else:
                 # new interval partially overlap guess range, update guess range.
-                self._guess_range = (max(low, init_lo - tol), min(high, init_hi + tol))
+                self._guess_range = tuple([max(low, init_lo - tol), min(high, init_hi + tol)])
 
         self._low = low
         self._high = high
@@ -799,3 +796,48 @@ def minimize_cost_golden_float(f, vmin, start, stop, tol=1e-8, maxiter=1000):
         return MinCostResult(x=test, xmax=test, vmax=vmax, nfev=nfev)
     else:
         return MinCostResult(x=None, xmax=test, vmax=vmax, nfev=nfev)
+
+
+def _non_increasing(slist):
+    return all(x[1] >= y[1] for x, y in zip(slist, slist[1:]))
+
+
+def _non_decreasing(slist):
+    return all(x[1] <= y[1] for x, y in zip(slist, slist[1:]))
+
+
+def _check_monotonicity(slist: SortedList, sort_dir: str, x: Union[float, int],
+                        y: float) -> Tuple[SortedList, str]:
+    item = (x, y)
+    slist.add(item)
+    idx = slist.index(item)
+    num_vals = len(slist)
+
+    if num_vals >= 3:
+        if idx == num_vals - 1:
+            filtered_list = slist[-3:]
+        elif idx == 0:
+            filtered_list = slist[:3]
+        else:
+            filtered_list = slist[idx - 1:idx + 2]
+
+        none_increasing = _non_increasing(filtered_list)
+        none_decreasing = _non_decreasing(filtered_list)
+        if none_decreasing and none_increasing:
+            updated_sort_dir = 'unknown'
+        elif none_decreasing:
+            updated_sort_dir = 'up'
+        elif none_increasing:
+            updated_sort_dir = 'down'
+        else:
+            print('Binary iterator observed non-monotonic values. Entering debugging mode:')
+            breakpoint()
+
+        # noinspection PyUnboundLocalVariable
+        if sort_dir != 'unknown' and sort_dir != updated_sort_dir:
+            print('Binary iterator observed non-monotonic values. Entering debugging mode:')
+            breakpoint()
+
+        sort_dir = updated_sort_dir
+
+    return slist, sort_dir

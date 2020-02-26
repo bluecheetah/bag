@@ -643,21 +643,24 @@ class Module(DesignMaster):
         # TODO: find better places to put these
         template_names = {
             'analogLib': {
-                'vdc': 'VDC{}',
-                'idc': 'IDC{}',
                 'cap': 'C{}',
+                'idc': 'IDC{}',
                 'res': 'R{}',
                 'vcvs': 'VCVS{}',
+                'vdc': 'VDC{}',
+                'vpulse': 'VPULSE{}',
+                'vpwlf': 'VPWLF{}',
             }
         }
         type_to_value_dict = {
             'analogLib': {
-                'vdc': 'vdc',
                 'cap': 'c',
-                'res': 'r',
                 'idc': 'idc',
-                'vpulse': None,
+                'res': 'r',
                 'vcvs': 'egain',
+                'vdc': 'vdc',
+                'vpulse': None,
+                'vpwlf': 'fileName',
             },
         }
 
