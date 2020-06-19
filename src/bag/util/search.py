@@ -45,6 +45,7 @@
 """
 
 from typing import Optional, Callable, Any, Container, Iterable, List, Tuple, Dict, Union
+from pybag.core import PyDisjointIntervals
 
 from sortedcontainers import SortedList
 import math
@@ -113,6 +114,10 @@ class BinaryIterator:
         """Returns the next value to look at."""
         return self._current * self._step + self._offset
 
+    def get_current(self) -> int:
+        """Returns the current value"""
+        return self._current
+
     def up(self, val: Optional[float] = None) -> None:
         """Increment this iterator."""
         if val is not None:
@@ -151,6 +156,83 @@ class BinaryIterator:
     def get_last_save_info(self) -> Any:
         """Return last save information."""
         return self._save_info
+
+
+class BinaryIteratorInterval:
+    """A class that performs binary search over integers, and respects intervals
+
+    This class supports both bounded or unbounded binary search, and
+    you can also specify a step size.
+
+    Parameters
+    ----------
+    low : int
+        the lower bound (inclusive).
+    high : Optional[int]
+        the upper bound (exclusive).  None for unbounded binary search.
+    step : int
+        the step size.  All return values will be low + N * step
+    search_step : int
+        the unbounded binary search step size, in units of step.
+        This is only used when trying to find the upper bound.
+    """
+
+    def __init__(self, interval_list, low: int, high: Optional[int] = None, step: int = 1,
+                 search_step: int = 1, even: bool = False) -> None:
+        if not isinstance(low, int) or not isinstance(step, int):
+            raise ValueError('low and step must be integers.')
+
+        self._bin_iter = BinaryIterator(low, high, step, search_step)
+        self._intvs = PyDisjointIntervals()
+        for width_intv in interval_list:
+            self._intvs.add(width_intv)
+        self.even = even
+
+    def set_current(self, val: int) -> None:
+        """Set the value of the current marker."""
+        self._bin_iter.set_current(val)
+
+    def has_next(self) -> bool:
+        """returns True if this iterator is not finished yet."""
+        return self._bin_iter.has_next()
+
+    def get_next(self) -> int:
+        """Returns the next value to look at."""
+        cur_next = self._bin_iter.get_next()
+
+        return self._intvs.get_next(cur_next, self.even)
+
+    def up(self, val: Optional[float] = None) -> None:
+        """Increment this iterator."""
+        self._bin_iter.up(val)
+        current_val = self._bin_iter.get_current()
+        if not self._intvs.covers(current_val):
+            # Not in the interval, need to snap to it
+            self._bin_iter.set_current(self._intvs.get_next(current_val, self.even))
+
+    def down(self, val: Optional[float] = None) -> None:
+        """Decrement this iterator."""
+        self._bin_iter.down(val)
+        current_val = self._bin_iter.get_current()
+        if not self._intvs.covers(current_val):
+            # Not in the interval, need to snap to it
+            self._bin_iter.set_current(self._intvs.get_prev(current_val, self.even))
+
+    def save(self) -> None:
+        """Save the current index."""
+        self._bin_iter.save()
+
+    def save_info(self, info: Any) -> None:
+        """Save current information."""
+        self._bin_iter.save_info(info)
+
+    def get_last_save(self) -> Optional[int]:
+        """Returns the last saved index."""
+        return self._bin_iter.get_last_save()
+
+    def get_last_save_info(self) -> Any:
+        """Return last save information."""
+        return self._bin_iter.get_last_save_info()
 
 
 class FloatBinaryIterator:

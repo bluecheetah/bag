@@ -123,9 +123,10 @@ class Calibre(VirtuosoChecker):
         if self._rcx_mode is RCXMode.qrc:
             return [f'{cell_name}.spf']
         else:
+            cell_name_upper = str(cell_name).upper()
             return [f'{cell_name}.pex.netlist',
                     f'{cell_name}.pex.netlist.pex',
-                    f'{cell_name}.pex.netlist.{cell_name}.pxi',
+                    f'{cell_name}.pex.netlist.{cell_name_upper}.pxi',
                     ]
 
     def setup_drc_flow(self, lib_name: str, cell_name: str, lay_view: str = 'layout',
@@ -144,35 +145,64 @@ class Calibre(VirtuosoChecker):
         return self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
                                        sch_view, params, mode, cmd, _lvs_passed_check, run_dir)
 
-    def setup_rcx_flow(self, lib_name: str, cell_name: str,
+    def setup_rcx_flow(self, lib_name: str, cell_name: str, sch_view: str = 'schematic',
+                       lay_view: str = 'layout', layout: str = '', netlist: str = '',
                        params: Optional[Dict[str, Any]] = None, run_dir: Union[str, Path] = ''
                        ) -> Sequence[FlowInfo]:
         # noinspection PyUnusedLocal
         def _rcx_passed_check(retcode: int, log_file: str) -> Tuple[str, str]:
             fpath = Path(log_file).resolve()
             out_file: Path = fpath.parent
-            out_file = out_file.joinpath(f'{cell_name}.spf')
-            if not out_file.is_file():
-                return '', ''
+            if self._rcx_mode is RCXMode.qrc:
+                out_file = out_file.joinpath(f'{cell_name}.spf')
+                if not out_file.is_file():
+                    return '', log_file
+                out_file_str = str(out_file)
+            else:
+                out_file = out_file.joinpath(f'{cell_name}.pex.netlist')
+                if not out_file.is_file():
+                    return '', log_file
+                parent_dir = out_file.resolve().parent
+                cell_name_upper = str(cell_name).upper()
+                out_file_str = [parent_dir.joinpath(f'{cell_name}.pex.netlist'),
+                        parent_dir.joinpath(f'{cell_name}.pex.netlist.pex'),
+                        parent_dir.joinpath(f'{cell_name}.pex.netlist.{cell_name_upper}.pxi'),
+                    ]
 
-            return str(out_file), log_file
 
-        cmd = ['qrc', '-64', '-cmd', None]
-        flow_list = self._setup_flow_helper(lib_name, cell_name, None, None, '',
-                                            '', params, 'rcx', cmd, _rcx_passed_check, run_dir)
+            return out_file_str, log_file
 
-        _, log_fname, env, dir_name, _ = flow_list[-1]
-        query_log = Path(log_fname).with_name('bag_query.log')
-        cmd = ['calibre', '-query_input', 'query.cmd', '-query', 'svdb']
-        flow_list.insert(len(flow_list) - 2,
-                         (cmd, str(query_log), env, dir_name, all_pass_callback))
-        return flow_list
+        if self._rcx_mode is RCXMode.qrc:
+            cmd = ['qrc', '-64', '-cmd', None]
+            flow_list = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
+                                                sch_view, params, 'rcx', cmd, _rcx_passed_check, run_dir)
+            _, log_fname, env, dir_name, _ = flow_list[-1]
+            query_log = Path(log_fname).with_name('bag_query.log')
+            cmd = ['calibre', '-query_input', 'query.cmd', '-query', 'svdb']
+            flow_list.insert(len(flow_list) - 2,
+                             (cmd, str(query_log), env, dir_name, all_pass_callback))
+            return flow_list
+        else:
+            cmd = ['calibre', '-lvs', '-hier', '-spice', run_dir + f'svdb/{cell_name}.sp', '-nowait', None]
+            flow_list = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
+                                                sch_view, params, 'rcx', cmd, all_pass_callback, run_dir, str_suffix='_lvs')
+            cmd = ['calibre', '-xrc', '-pdb', '-rc', '-turbo 1', '-nowait', None]
+            flow2 = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
+                                            sch_view, params, 'rcx', cmd, all_pass_callback, run_dir, str_suffix='_pdb')
+
+            cmd = ['calibre', '-xrc', '-fmt', '-all', '-nowait', None]
+            flow3 = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
+                                            sch_view, params, 'rcx', cmd, _rcx_passed_check, run_dir)
+            flow_list.insert(len(flow_list), flow2[-1])
+            flow_list.insert(len(flow_list), flow3[-1])
+
+            return flow_list
 
     def _setup_flow_helper(self, lib_name: str, cell_name: str, layout: Optional[str],
                            netlist: Optional[str], lay_view: str, sch_view: str,
                            user_params: Optional[Dict[str, Any]], mode: str, run_cmd: List[str],
                            check_fun: Callable[[Optional[int], str], Any],
-                           run_dir_override: Union[str, Path]) -> List[FlowInfo]:
+                           run_dir_override: Union[str, Path], str_suffix: str = '') -> List[FlowInfo]:
         tmp = self.setup_job(mode, lib_name, cell_name, layout, netlist, lay_view,
                              sch_view, user_params, run_dir_override)
         flow_list, run_dir, run_env, params, ctl_params = tmp
@@ -181,7 +211,7 @@ class Calibre(VirtuosoChecker):
         ctl_path = self._make_control_file(mode, run_dir, ctl_params)
         run_cmd[-1] = str(ctl_path)
 
-        log_path = run_dir / f'bag_{mode}.log'
+        log_path = run_dir / f'bag_{mode + str_suffix}.log'
         flow_list.append((run_cmd, str(log_path), run_env, str(run_dir), check_fun))
 
         return flow_list

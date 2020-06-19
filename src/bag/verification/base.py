@@ -467,8 +467,8 @@ class SubProcessChecker(Checker, abc.ABC):
 
     async def async_run_rcx(self, lib_name: str, cell_name: str,
                             params: Optional[Dict[str, Any]] = None,
-                            run_dir: Union[str, Path] = '') -> Tuple[str, str]:
-        flow_info = self.setup_rcx_flow(lib_name, cell_name, params, run_dir)
+                            run_dir: Union[str, Path] = '', **kwargs) -> Tuple[str, str]:
+        flow_info = self.setup_rcx_flow(lib_name, cell_name, params, run_dir, **kwargs)
         return await self._manager.async_new_subprocess_flow(flow_info)
 
     async def async_export_layout(self, lib_name: str, cell_name: str,

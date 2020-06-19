@@ -26,6 +26,7 @@ from pybag.enum import LogLevel
 
 from ..util.importlib import import_class
 from ..util.logging import LoggingBase
+from ..io.file import write_yaml
 from ..concurrent.core import batch_async_task
 from ..design.module import Module
 from ..layout.tech import TechInfo
@@ -34,6 +35,9 @@ from ..layout.template import TemplateBase
 from .core import TestbenchManager
 from .measure import MeasurementManager
 from .cache import SimulationDB, SimResults, MeasureResult, DesignInstance
+
+from bag3_digital.measurement.liberty.io import generate_liberty
+from bag.io import read_yaml
 
 if TYPE_CHECKING:
     from ..core import BagProject
@@ -112,7 +116,21 @@ class DesignerBase(LoggingBase, abc.ABC):
                                  force_sim=force_sim, precision=precision, log_level=log_level)
         designer = dsn_cls(root_path, sim_db, dsn_params)
         summary = designer.run_design()
-        pprint.pprint(summary)
+        if 'gen_specs' in summary:
+            prj.generate_cell(summary['gen_specs'], **summary['gen_args'])
+            if 'gen_lib' in summary['gen_specs'] and summary['gen_specs']['gen_lib']:
+                lib_specs = summary['gen_specs']['lib_specs']
+                lib_args = summary['gen_specs']['lib_args']
+                lib_file = lib_specs['lib_file']
+                lib_file_path = Path(lib_file)
+                lib_file_specs = read_yaml(lib_file_path)
+                root_dir = lib_file_path.parent
+                lib_config = read_yaml(root_dir / 'lib_config.yaml')
+                sim_config = read_yaml(root_dir / 'sim_config.yaml')
+
+                generate_liberty(prj, lib_config, sim_config, lib_file_specs, **lib_args)
+        else:
+            pprint.pprint(summary)
 
     def get_design_dir(self, parent_dir: Path) -> Path:
         if self.extract:

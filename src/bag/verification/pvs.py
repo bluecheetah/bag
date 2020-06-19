@@ -99,7 +99,7 @@ class PVS(VirtuosoChecker):
 
     def get_rcx_netlists(self, lib_name: str, cell_name: str) -> List[str]:
         # PVS generate schematic cellviews directly.
-        return []
+        return [f'{cell_name}.spf']
 
     def setup_drc_flow(self, lib_name: str, cell_name: str, lay_view: str = 'layout',
                        layout: str = '', params: Optional[Dict[str, Any]] = None,
@@ -129,6 +129,8 @@ class PVS(VirtuosoChecker):
                '-gds', ctl_params['layout_file'], '-layout_top_cell', cell_name,
                '-source_cdl', ctl_params['netlist_file'], '-source_top_cell', cell_name,
                'pvs_rules']
+        if run_rcx:
+            cmd.insert(3, '-qrc_data')
 
         log_path = run_dir_path / f'bag_{mode}.log'
         flow_list.append((cmd, str(log_path), run_env, str(run_dir_path), _lvs_passed_check))
@@ -138,7 +140,30 @@ class PVS(VirtuosoChecker):
     def setup_rcx_flow(self, lib_name: str, cell_name: str,
                        params: Optional[Dict[str, Any]] = None, run_dir: Union[str, Path] = ''
                        ) -> Sequence[FlowInfo]:
-        raise NotImplementedError('Not supported yet.')
+        # noinspection PyUnusedLocal
+        def _rcx_passed_check(retcode: int, log_file: str) -> Tuple[str, str]:
+            out_file = Path(log_file).parent.resolve()
+            out_file = out_file.joinpath(f'{cell_name}.spf')
+            if not out_file.is_file():
+                return '', ''
+
+            return str(out_file), str(log_file)
+
+        mode = 'rcx'
+        tmp = self.setup_job(mode, lib_name, cell_name, None, None, '', '', params, run_dir)
+        flow_list, run_dir, run_env, params, ctl_params = tmp
+
+        ctl_path = run_dir / f'bag_{mode}.ctrl'
+        ctl_template = self.get_control_template(mode)
+        content = ctl_template.render(**ctl_params)
+        write_file(ctl_path, content)
+
+        # generate new control file
+        run_cmd = ['qrc', '-64', '-cmd', str(ctl_path)]
+        log_path = run_dir / f'bag_{mode}.log'
+
+        flow_list.append((run_cmd, str(log_path), run_env, str(run_dir), _rcx_passed_check))
+        return flow_list
 
 
 # noinspection PyUnusedLocal

@@ -577,9 +577,15 @@ class BagProject:
             final_netlist_type = DesignOutput.CDL
             if final_netlist:
                 print('RCX passed!')
-                to_file = str(root_path / Path(final_netlist).name)
-                shutil.copy(final_netlist, to_file)
-                final_netlist = to_file
+                if isinstance(final_netlist, list):
+                    for f in final_netlist:
+                        to_file = str(root_path / Path(f).name)
+                        shutil.copy(f, to_file)
+                        final_netlist = to_file
+                else:
+                    to_file = str(root_path / Path(final_netlist).name)
+                    shutil.copy(final_netlist, to_file)
+                    final_netlist = to_file
             else:
                 raise ValueError(f'RCX failed... log file: {rcx_log}')
 

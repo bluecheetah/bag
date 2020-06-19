@@ -282,10 +282,20 @@ class DesignDB(LoggingBase):
 
         self.log('running RCX...')
         final_netlist, rcx_log = await self._db.async_run_rcx(impl_lib, impl_cell,
+                                                              layout=str(dsn_dir / 'layout.gds'),
+                                                              netlist=str(dsn_dir / 'netlist.cdl'),
                                                               run_dir=ext_dir)
         if final_netlist:
             self.log('RCX passed!')
-            shutil.copy(final_netlist, str(dsn_dir / 'rcx.sp'))
+            if isinstance(final_netlist, list):
+                for f in final_netlist:
+                    file_name = f.name
+                    if len(f.suffixes) == 2 and f.suffixes[0] == '.pex' and f.suffixes[1] == '.netlist':
+                        shutil.copy(f, str(dsn_dir / 'rcx.sp'))
+                    else:
+                        shutil.copy(f, str(dsn_dir / file_name))
+            else:
+                shutil.copy(final_netlist, str(dsn_dir / 'rcx.sp'))
         else:
             self.error(f'RCX failed... log file: {rcx_log}')
 
