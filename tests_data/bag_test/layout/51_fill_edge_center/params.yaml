@@ -1,4 +1,0 @@
-module: bag_test.layout.fill
-class: FillEdgeCenterTest
-params:
-  fill_layer: 3
