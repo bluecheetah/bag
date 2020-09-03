@@ -1,3 +1,3 @@
 [submodule "pybag"]
 	path = pybag
-	url = git@github.com:bluecheetah/pybag.git
+	url = git@github.com:ucb-art/pybag.git
