@@ -14,8 +14,9 @@
     <option name="requirementsPath" value="" />
   </component>
   <component name="PyDocumentationSettings">
-    <option name="analyzeDoctest" value="false" />
+    <option name="format" value="NUMPY" />
     <option name="myDocStringFormat" value="NumPy" />
+    <option name="analyzeDoctest" value="false" />
   </component>
   <component name="TemplatesService">
     <option name="TEMPLATE_FOLDERS">
@@ -25,7 +26,6 @@
     </option>
   </component>
   <component name="TestRunnerService">
-    <option name="projectConfiguration" value="pytest" />
     <option name="PROJECT_TEST_RUNNER" value="pytest" />
   </component>
 </module>

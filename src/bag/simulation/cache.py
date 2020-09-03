@@ -147,11 +147,11 @@ class DesignDB(LoggingBase):
         return ans
 
     async def async_new_design(self, impl_cell: str,
-                               lay_cls: Union[Type[TemplateBase], Type[Module], str],
+                               dut_cls: Union[Type[TemplateBase], Type[Module], str],
                                dut_params: Mapping[str, Any], extract: Optional[bool] = None,
                                name_prefix: str = '', name_suffix: str = '', flat: bool = False,
                                export_lay: bool = False) -> DesignInstance:
-        dut, ext_path = await self._create_dut(impl_cell, lay_cls, dut_params, extract=extract,
+        dut, ext_path = await self._create_dut(impl_cell, dut_cls, dut_params, extract=extract,
                                                name_prefix=name_prefix, name_suffix=name_suffix,
                                                flat=flat, export_lay=export_lay)
         if ext_path is not None:
@@ -398,11 +398,11 @@ class SimulationDB(LoggingBase):
         return await self._dsn_db.async_batch_design(dut_specs)
 
     async def async_new_design(self, impl_cell: str,
-                               lay_cls: Union[Type[TemplateBase], Type[Module], str],
+                               dut_cls: Union[Type[TemplateBase], Type[Module], str],
                                dut_params: Mapping[str, Any], extract: Optional[bool] = None,
                                name_prefix: str = '', name_suffix: str = '',
                                flat: bool = False, export_lay: bool = False) -> DesignInstance:
-        return await self._dsn_db.async_new_design(impl_cell, lay_cls, dut_params, extract=extract,
+        return await self._dsn_db.async_new_design(impl_cell, dut_cls, dut_params, extract=extract,
                                                    name_prefix=name_prefix, export_lay=export_lay,
                                                    name_suffix=name_suffix, flat=flat)
 

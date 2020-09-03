@@ -343,8 +343,16 @@ class BagProject:
             the extraction netlist.  Empty on error or if extraction is not run.
         """
         root_dir: Union[str, Path] = specs.get('root_dir', '')
-        lay_str: Union[str, Type[TemplateBase]] = specs.get('lay_class', '')
+        dut_str: Union[str, Type[TemplateBase], Type[Module]] = specs.get('dut_class', specs.get('lay_class', ''))
         sch_str: Union[str, Type[Module]] = specs.get('sch_class', '')
+        dut_cls = import_class(dut_str)
+        if issubclass(dut_cls, TemplateBase):
+            lay_cls = dut_cls
+            has_lay = True
+        else:
+            lay_cls = None
+            sch_str = dut_cls
+            has_lay = False
         impl_lib: str = specs['impl_lib']
         impl_cell: str = specs['impl_cell']
         params: Optional[Mapping[str, Any]] = specs.get('params', None)
@@ -377,13 +385,6 @@ class BagProject:
             root_path = Path(root_dir)
         else:
             root_path = root_dir
-
-        if lay_str == '':
-            has_lay = False
-            lay_cls = None
-        else:
-            lay_cls = cast(Type[TemplateBase], import_class(lay_str))
-            has_lay = True
 
         gen_lay = gen_lay and has_lay
         gen_model = gen_model and model_params
@@ -821,14 +822,14 @@ class BagProject:
         gen_specs_file: str = specs.get('gen_specs_file', '')
         if gen_specs_file:
             gen_specs: Mapping[str, Any] = read_yaml(gen_specs_file)
-            lay_str: Union[str, Type[TemplateBase]] = gen_specs['lay_class']
+            dut_str: Union[str, Type[TemplateBase]] = gen_specs.get('dut_class', gen_specs['lay_class'])
             impl_lib: str = gen_specs['impl_lib']
             impl_cell: str = gen_specs['impl_cell']
             dut_params: Mapping[str, Any] = gen_specs['params']
             root_dir: Union[str, Path] = gen_specs['root_dir']
             meas_rel_dir: str = specs.get('meas_rel_dir', '')
         else:
-            lay_str: Union[str, Type[TemplateBase]] = specs['lay_class']
+            dut_str: Union[str, Type[TemplateBase]] = specs.get('dut_class', specs['lay_class'])
             impl_lib: str = specs['impl_lib']
             impl_cell: str = specs['impl_cell']
             dut_params: Mapping[str, Any] = specs['dut_params']
@@ -836,7 +837,7 @@ class BagProject:
             meas_rel_dir: str = specs.get('meas_rel_dir', '')
 
         meas_cls = cast(Type[MeasurementManager], import_class(meas_str))
-        lay_cls = cast(Type[TemplateBase], import_class(lay_str))
+        dut_cls = import_class(dut_str)
         if isinstance(root_dir, str):
             root_path = Path(root_dir)
         else:
@@ -857,7 +858,7 @@ class BagProject:
                                                 dsn_options=dsn_options, force_sim=force_sim,
                                                 precision=precision, log_level=log_level)
 
-        dut = sim_db.new_design(impl_cell, lay_cls, dut_params, extract=extract)
+        dut = sim_db.new_design(impl_cell, dut_cls, dut_params, extract=extract)
         meas_params['fake'] = fake
         mm = sim_db.make_mm(meas_cls, meas_params)
         result = sim_db.simulate_mm_obj(meas_name, meas_path / meas_name, dut, mm)
