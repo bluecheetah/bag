@@ -578,6 +578,8 @@ class BagProject:
             final_netlist_type = DesignOutput.CDL
             if final_netlist:
                 print('RCX passed!')
+                if not raw:
+                    root_path.mkdir(parents=True, exist_ok=True)
                 if isinstance(final_netlist, list):
                     for f in final_netlist:
                         to_file = str(root_path / Path(f).name)
