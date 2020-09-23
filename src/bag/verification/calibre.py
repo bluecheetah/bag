@@ -165,10 +165,9 @@ class Calibre(VirtuosoChecker):
                 parent_dir = out_file.resolve().parent
                 cell_name_upper = str(cell_name).upper()
                 out_file_str = [parent_dir.joinpath(f'{cell_name}.pex.netlist'),
-                        parent_dir.joinpath(f'{cell_name}.pex.netlist.pex'),
-                        parent_dir.joinpath(f'{cell_name}.pex.netlist.{cell_name_upper}.pxi'),
-                    ]
-
+                                parent_dir.joinpath(f'{cell_name}.pex.netlist.pex'),
+                                parent_dir.joinpath(f'{cell_name}.pex.netlist.{cell_name_upper}.pxi'),
+                                ]
 
             return out_file_str, log_file
 

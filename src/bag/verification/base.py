@@ -351,8 +351,9 @@ class SubProcessChecker(Checker, abc.ABC):
         return []
 
     @abc.abstractmethod
-    def setup_rcx_flow(self, lib_name: str, cell_name: str,
-                       params: Optional[Dict[str, Any]] = None, run_dir: Union[str, Path] = ''
+    def setup_rcx_flow(self, lib_name: str, cell_name: str, sch_view: str = 'schematic',
+                       lay_view: str = 'layout', layout: str = '', netlist: str = '',
+                       params: Optional[Dict[str, Any]] = None, run_dir: Union[str, Path] = '',
                        ) -> Sequence[FlowInfo]:
         """This method performs any setup necessary to configure a RCX subprocess flow.
 
@@ -362,6 +363,14 @@ class SubProcessChecker(Checker, abc.ABC):
             library name.
         cell_name : str
             cell name.
+        sch_view : str
+            schematic view name
+        lay_view : str
+            layout view name
+        layout : str
+            layout netlist
+        netlist : str
+            schematic netlist
         params : Optional[Dict[str, Any]]
             optional RCX parameter values.
         run_dir : Union[str, Path]

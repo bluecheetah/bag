@@ -137,7 +137,8 @@ class PVS(VirtuosoChecker):
 
         return flow_list
 
-    def setup_rcx_flow(self, lib_name: str, cell_name: str,
+    def setup_rcx_flow(self, lib_name: str, cell_name: str, sch_view: str = 'schematic',
+                       lay_view: str = 'layout', layout: str = '', netlist: str = '',
                        params: Optional[Dict[str, Any]] = None, run_dir: Union[str, Path] = ''
                        ) -> Sequence[FlowInfo]:
         # noinspection PyUnusedLocal
@@ -150,7 +151,7 @@ class PVS(VirtuosoChecker):
             return str(out_file), str(log_file)
 
         mode = 'rcx'
-        tmp = self.setup_job(mode, lib_name, cell_name, None, None, '', '', params, run_dir)
+        tmp = self.setup_job(mode, lib_name, cell_name, layout, netlist, lay_view, sch_view, params, run_dir)
         flow_list, run_dir, run_env, params, ctl_params = tmp
 
         ctl_path = run_dir / f'bag_{mode}.ctrl'
