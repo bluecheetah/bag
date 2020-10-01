@@ -650,6 +650,7 @@ class Module(DesignMaster):
                 'vdc': 'VDC{}',
                 'vpulse': 'VPULSE{}',
                 'vpwlf': 'VPWLF{}',
+                'vsin': 'VSIN{}',
             }
         }
         type_to_value_dict = {
@@ -661,6 +662,7 @@ class Module(DesignMaster):
                 'vdc': 'vdc',
                 'vpulse': None,
                 'vpwlf': 'fileName',
+                'vsin': None,
             },
         }
 
