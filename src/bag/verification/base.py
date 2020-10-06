@@ -156,7 +156,8 @@ class Checker(abc.ABC):
         return False, ''
 
     @abc.abstractmethod
-    async def async_run_rcx(self, lib_name: str, cell_name: str,
+    async def async_run_rcx(self, lib_name: str, cell_name: str, sch_view: str = 'schematic',
+                            lay_view: str = 'layout', layout: str = '', netlist: str = '',
                             params: Optional[Dict[str, Any]] = None,
                             run_dir: Union[str, Path] = '') -> Tuple[str, str]:
         """A coroutine for running RCX.
@@ -167,6 +168,14 @@ class Checker(abc.ABC):
             library name.
         cell_name : str
             cell name.
+        sch_view : str
+            schematic view name.  Optional.
+        lay_view : str
+            layout view name.  Optional.
+        layout : str
+            the layout file name.  If not empty, will not try to generate the layout file.
+        netlist : str
+            the CDL netlist name.  If provided, will not try to call tools to generate netlist.
         params : Optional[Dict[str, Any]]
             optional RCX parameter values.
         run_dir : Union[str, Path]
@@ -474,10 +483,12 @@ class SubProcessChecker(Checker, abc.ABC):
                                         netlist, params, run_rcx, run_dir)
         return await self._manager.async_new_subprocess_flow(flow_info)
 
-    async def async_run_rcx(self, lib_name: str, cell_name: str,
+    async def async_run_rcx(self, lib_name: str, cell_name: str, sch_view: str = 'schematic',
+                            lay_view: str = 'layout', layout: str = '', netlist: str = '',
                             params: Optional[Dict[str, Any]] = None,
-                            run_dir: Union[str, Path] = '', **kwargs) -> Tuple[str, str]:
-        flow_info = self.setup_rcx_flow(lib_name, cell_name, params, run_dir, **kwargs)
+                            run_dir: Union[str, Path] = '') -> Tuple[str, str]:
+        flow_info = self.setup_rcx_flow(lib_name, cell_name, sch_view, lay_view, layout,
+                                        netlist, params, run_dir)
         return await self._manager.async_new_subprocess_flow(flow_info)
 
     async def async_export_layout(self, lib_name: str, cell_name: str,
