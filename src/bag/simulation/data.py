@@ -667,6 +667,12 @@ class AnalysisData:
                 swp_names = swp_names[:-1]
                 swp_shape, swp_vals = _check_is_md(num_env, [self._data[par] for par in swp_names],
                                                    rtol, atol, last_dset.shape[-1])
+
+                if len(swp_names) == 0:  # TODO: this is a hack to fix for 1 variable sweep
+                    swp_shape = list(swp_shape)
+                    swp_shape[-1] *= self._data[name].size
+                    swp_shape = tuple(swp_shape)
+                    
                 if swp_shape is not None:
                     for par, vals in zip(swp_names, swp_vals):
                         self._data[par] = vals
