@@ -300,6 +300,8 @@ class BagProject:
             gds_file : str
                 override the default GDS layout file name.  Note that specifying this entry does
                 not mean a GDS file will be created, you must set raw = True or gen_gds = True.
+            rcx_params : Optional[Dict[str, Any]]
+                Extra rcx parameters that users can override.
 
         raw : bool
             True to generate GDS and netlist files instead of OA cellviews.
@@ -365,6 +367,7 @@ class BagProject:
         default_model_view: str = specs.get('default_model_view', '')
         hierarchy_file: str = specs.get('hierarchy_file', '')
         model_params: Mapping[str, Any] = specs.get('model_params', {})
+        rcx_params: Optional[Mapping[str, Any]] = specs.get('rcx_params', None)
         sup_wrap_mode: str = specs.get('model_supply_wrap_mode', 'NONE')
         lef_config: Mapping[str, Any] = specs.get('lef_config', {})
         name_prefix: str = specs.get('name_prefix', '')
@@ -574,7 +577,7 @@ class BagProject:
 
         if lvs_passed and run_rcx:
             print('running RCX...')
-            final_netlist, rcx_log = self.run_rcx(impl_lib, gen_cell_name)
+            final_netlist, rcx_log = self.run_rcx(impl_lib, gen_cell_name, params=rcx_params)
             final_netlist_type = DesignOutput.CDL
             if final_netlist:
                 print('RCX passed!')
@@ -820,6 +823,7 @@ class BagProject:
         meas_name: str = specs['meas_name']
         meas_params: Dict[str, Any] = specs['meas_params']
         precision: int = specs.get('precision', 6)
+        rcx_params: Optional[Mapping[str, Any]] = specs.get('rcx_params', None)
 
         gen_specs_file: str = specs.get('gen_specs_file', '')
         if gen_specs_file:
@@ -860,7 +864,7 @@ class BagProject:
                                                 dsn_options=dsn_options, force_sim=force_sim,
                                                 precision=precision, log_level=log_level)
 
-        dut = sim_db.new_design(impl_cell, dut_cls, dut_params, extract=extract)
+        dut = sim_db.new_design(impl_cell, dut_cls, dut_params, extract=extract, rcx_params=rcx_params)
         meas_params['fake'] = fake
         mm = sim_db.make_mm(meas_cls, meas_params)
         result = sim_db.simulate_mm_obj(meas_name, meas_path / meas_name, dut, mm)

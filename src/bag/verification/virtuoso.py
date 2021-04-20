@@ -179,7 +179,8 @@ class VirtuosoChecker(SubProcessChecker, ABC):
 
         params_actual = params.copy()
         if user_params is not None:
-            params_actual.update(params)
+            params_actual.update(user_params)
+        ctl_params.update(params_actual)
 
         if env_vars:
             run_env = dict(**os.environ)

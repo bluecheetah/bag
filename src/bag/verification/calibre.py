@@ -185,7 +185,8 @@ class Calibre(VirtuosoChecker):
             cmd = ['calibre', '-lvs', '-hier', '-spice', run_dir + f'svdb/{cell_name}.sp', '-nowait', None]
             flow_list = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
                                                 sch_view, params, 'rcx', cmd, all_pass_callback, run_dir, str_suffix='_lvs')
-            cmd = ['calibre', '-xrc', '-pdb', '-rc', '-turbo 1', '-nowait', None]
+            extract_type = params.get('extract_type', self.get_config('rcx')['params'].get('extract_type', 'rc'))
+            cmd = ['calibre', '-xrc', '-pdb', f'-{extract_type}', '-turbo 1', '-nowait', None]
             flow2 = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
                                             sch_view, params, 'rcx', cmd, all_pass_callback, run_dir, str_suffix='_pdb')
 

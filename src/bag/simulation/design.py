@@ -183,8 +183,8 @@ class DesignerBase(LoggingBase, abc.ABC):
         return self._sim_db.make_mm(mm_cls, meas_specs)
 
     async def async_batch_dut(self, dut_specs: Sequence[Mapping[str, Any]],
-                              ) -> Sequence[DesignInstance]:
-        return await self._sim_db.async_batch_design(dut_specs)
+                              rcx_params: Optional[Mapping[str, Any]] = None) -> Sequence[DesignInstance]:
+        return await self._sim_db.async_batch_design(dut_specs, rcx_params=rcx_params)
 
     async def async_new_dut(self, impl_cell: str,
                             lay_cls: Union[Type[TemplateBase], Type[Module], str],

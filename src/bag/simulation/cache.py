@@ -128,8 +128,8 @@ class DesignDB(LoggingBase):
     def extract(self) -> bool:
         return self._extract
 
-    async def async_batch_design(self, dut_specs: Sequence[Mapping[str, Any]]
-                                 ) -> Sequence[DesignInstance]:
+    async def async_batch_design(self, dut_specs: Sequence[Mapping[str, Any]],
+                                 rcx_params: Optional[Mapping[str, Any]] = None) -> Sequence[DesignInstance]:
         ans = []
         extract_set = set()
         gatherer = GatherHelper()
@@ -139,7 +139,7 @@ class DesignDB(LoggingBase):
             if ext_path is not None and ext_path not in extract_set:
                 extract_set.add(ext_path)
                 impl_cell: str = dut_info['impl_cell']
-                gatherer.append(self._extract_netlist(ext_path, impl_cell))
+                gatherer.append(self._extract_netlist(ext_path, impl_cell, rcx_params=rcx_params))
 
         if gatherer:
             await gatherer.gather_err()
@@ -149,19 +149,21 @@ class DesignDB(LoggingBase):
     async def async_new_design(self, impl_cell: str,
                                dut_cls: Union[Type[TemplateBase], Type[Module], str],
                                dut_params: Mapping[str, Any], extract: Optional[bool] = None,
+                               rcx_params: Optional[Mapping[str, Any]] = None,
                                name_prefix: str = '', name_suffix: str = '', flat: bool = False,
                                export_lay: bool = False) -> DesignInstance:
         dut, ext_path = await self._create_dut(impl_cell, dut_cls, dut_params, extract=extract,
                                                name_prefix=name_prefix, name_suffix=name_suffix,
                                                flat=flat, export_lay=export_lay)
         if ext_path is not None:
-            await self._extract_netlist(ext_path, impl_cell)
+            await self._extract_netlist(ext_path, impl_cell, rcx_params)
 
         return dut
 
     def new_design(self, impl_cell: str, lay_cls: Union[Type[TemplateBase], Type[Module], str],
-                   dut_params: Mapping[str, Any], extract: Optional[bool] = None) -> DesignInstance:
-        coro = self.async_new_design(impl_cell, lay_cls, dut_params, extract=extract)
+                   dut_params: Mapping[str, Any], extract: Optional[bool] = None,
+                   rcx_params: Optional[Mapping[str, Any]] = None) -> DesignInstance:
+        coro = self.async_new_design(impl_cell, lay_cls, dut_params, extract=extract, rcx_params=rcx_params)
         results = batch_async_task([coro])
         if results is None:
             self.error('Design generation cancelled')
@@ -266,7 +268,7 @@ class DesignDB(LoggingBase):
 
         return DesignInstance(impl_cell, sch_master, lay_master, ans, cv_info_out), extract_info
 
-    async def _extract_netlist(self, dsn_dir: Path, impl_cell: str) -> None:
+    async def _extract_netlist(self, dsn_dir: Path, impl_cell: str, rcx_params: Mapping[str, Any]) -> None:
         impl_lib = self.impl_lib
 
         self.log('running LVS...')
@@ -284,7 +286,8 @@ class DesignDB(LoggingBase):
         final_netlist, rcx_log = await self._db.async_run_rcx(impl_lib, impl_cell,
                                                               layout=str(dsn_dir / 'layout.gds'),
                                                               netlist=str(dsn_dir / 'netlist.cdl'),
-                                                              run_dir=ext_dir)
+                                                              run_dir=ext_dir,
+                                                              params=rcx_params)
         if final_netlist:
             self.log('RCX passed!')
             if isinstance(final_netlist, list):
@@ -358,8 +361,9 @@ class SimulationDB(LoggingBase):
                        precision=self._precision)
 
     def new_design(self, impl_cell: str, lay_cls: Union[Type[TemplateBase], Type[Module], str],
-                   dut_params: Mapping[str, Any], extract: Optional[bool] = None) -> DesignInstance:
-        return self._dsn_db.new_design(impl_cell, lay_cls, dut_params, extract=extract)
+                   dut_params: Mapping[str, Any], extract: Optional[bool] = None,
+                   rcx_params: Optional[Mapping[str, Any]] = None) -> DesignInstance:
+        return self._dsn_db.new_design(impl_cell, lay_cls, dut_params, extract=extract, rcx_params=rcx_params)
 
     def simulate_tbm(self, sim_id: str, sim_dir: Path, dut: DesignInstance,
                      tbm_cls: Union[Type[TestbenchManager], str],
@@ -394,15 +398,17 @@ class SimulationDB(LoggingBase):
         return ans
 
     async def async_batch_design(self, dut_specs: Sequence[Mapping[str, Any]],
-                                 ) -> Sequence[DesignInstance]:
-        return await self._dsn_db.async_batch_design(dut_specs)
+                                 rcx_params: Optional[Mapping[str, Any]] = None) -> Sequence[DesignInstance]:
+        return await self._dsn_db.async_batch_design(dut_specs, rcx_params=rcx_params)
 
     async def async_new_design(self, impl_cell: str,
                                dut_cls: Union[Type[TemplateBase], Type[Module], str],
                                dut_params: Mapping[str, Any], extract: Optional[bool] = None,
+                               rcx_params: Optional[Mapping[str, Any]] = None,
                                name_prefix: str = '', name_suffix: str = '',
                                flat: bool = False, export_lay: bool = False) -> DesignInstance:
         return await self._dsn_db.async_new_design(impl_cell, dut_cls, dut_params, extract=extract,
+                                                   rcx_params=rcx_params,
                                                    name_prefix=name_prefix, export_lay=export_lay,
                                                    name_suffix=name_suffix, flat=flat)
 
