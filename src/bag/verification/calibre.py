@@ -163,10 +163,10 @@ class Calibre(VirtuosoChecker):
                 if not out_file.is_file():
                     return '', log_file
                 parent_dir = out_file.resolve().parent
-                cell_name_upper = str(cell_name).upper()
+                # cell_name_upper = str(cell_name).upper()
                 out_file_str = [parent_dir.joinpath(f'{cell_name}.pex.netlist'),
                                 parent_dir.joinpath(f'{cell_name}.pex.netlist.pex'),
-                                parent_dir.joinpath(f'{cell_name}.pex.netlist.{cell_name_upper}.pxi'),
+                                parent_dir.joinpath(f'{cell_name}.pex.netlist.{cell_name}.pxi'),
                                 ]
 
             return out_file_str, log_file
@@ -182,7 +182,7 @@ class Calibre(VirtuosoChecker):
                              (cmd, str(query_log), env, dir_name, all_pass_callback))
             return flow_list
         else:
-            cmd = ['calibre', '-lvs', '-hier', '-spice', run_dir + f'svdb/{cell_name}.sp', '-nowait', None]
+            cmd = ['calibre', '-lvs', '-hier', '-spice', run_dir.resolve() + f'svdb/{cell_name}.sp', '-nowait', None]
             flow_list = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
                                                 sch_view, params, 'rcx', cmd, all_pass_callback, run_dir, str_suffix='_lvs')
             extract_type = params.get('extract_type', self.get_config('rcx')['params'].get('extract_type', 'rc'))
