@@ -615,6 +615,33 @@ class BagProject:
 
         return final_netlist
 
+    def extract_cell(self, lib_name: str, cell_name: str, extract_type: Optional[str]) -> None:
+        print('running LVS...')
+        lvs_passed, lvs_log = self.run_lvs(lib_name, cell_name, run_rcx=True)
+        if lvs_passed:
+            print('LVS passed!')
+            print('running RCX...')
+            rcx_params = dict(extract_type=extract_type) if extract_type else None
+            final_netlist, rcx_log = self.run_rcx(lib_name, cell_name, params=rcx_params)
+            if final_netlist:
+                print('RCX passed!')
+                root_path = Path(f'gen_outputs/{lib_name}/{cell_name}')
+                root_path.mkdir(parents=True, exist_ok=True)
+                if isinstance(final_netlist, list):
+                    for f in final_netlist:
+                        to_file = str(root_path / Path(f).name)
+                        shutil.copy(f, to_file)
+                        final_netlist = to_file
+                else:
+                    to_file = str(root_path / Path(final_netlist).name)
+                    shutil.copy(final_netlist, to_file)
+                    final_netlist = to_file
+                print(f'Extracted netlist is {final_netlist}')
+            else:
+                raise ValueError(f'RCX failed... log file: {rcx_log}')
+        else:
+            raise ValueError(f'LVS failed... log file: {lvs_log}')
+
     def replace_dut_in_wrapper(self, params: Mapping[str, Any], dut_lib: str,
                                dut_cell: str) -> Mapping[str, Any]:
         # helper function that replaces dut_lib and dut_cell in the wrapper recursively in
