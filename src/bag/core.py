@@ -80,7 +80,7 @@ from .simulation.measure import MeasurementManager
 from .simulation.cache import SimulationDB, DesignDB
 
 if TYPE_CHECKING:
-    from .simulation.base import SimAccess
+    from .simulation.base import SimAccess, EmSimAccess
 
 
 class BagProject:
@@ -976,6 +976,34 @@ class BagProject:
                                         load_from_file=load_from_file, gen_sch=False)
 
         return result
+
+    def em_cell(self, specs: Mapping[str, Any], force_sim: bool = False, log_level: LogLevel = LogLevel.DEBUG) -> None:
+        impl_lib: str = specs['impl_lib']
+        impl_cell: str = specs['impl_cell']
+        root_dir: Union[str, Path] = specs['root_dir']
+        params: Mapping[str, Any] = specs['params']
+
+        if isinstance(root_dir, str):
+            root_path = Path(root_dir)
+        else:
+            root_path = root_dir
+
+        gds_file = root_path / f'{impl_cell}.gds'
+
+        # TODO: caching
+
+        # make EM_SimAccess instance if it is defined in bag_config.yaml
+        if 'em_simulation' in self.bag_config:
+            if not gds_file.exists():
+                self.export_layout(impl_lib, impl_cell, str(gds_file))
+
+            em_sim_cls = cast(Type['EmSimAccess'], import_class(self.bag_config['em_simulation']['class']))
+            em_obj: Optional[EmSimAccess] = em_sim_cls(get_bag_tmp_dir(), self.bag_config['em_simulation'],
+                                                       cell_name=impl_cell, gds_file=gds_file, params=params,
+                                                       root_path=root_path)
+            em_obj.run_simulation()
+        else:
+            raise NotImplementedError('EM simulation is not set up in bag_config.yaml.')
 
     def create_library(self, lib_name, lib_path=''):
         # type: (str, str) -> None

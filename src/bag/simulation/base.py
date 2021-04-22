@@ -48,7 +48,7 @@ This module defines SimAccess, which provides methods to run simulations
 and retrieve results.
 """
 
-from typing import Dict, Any, Tuple, Union, Sequence
+from typing import Mapping, Any, Tuple, Union, Sequence
 
 import abc
 from pathlib import Path
@@ -87,11 +87,11 @@ class SimAccess(abc.ABC):
     ----------
     parent : str
         parent directory for SimAccess.
-    sim_config : Dict[str, Any]
+    sim_config : Mapping[str, Any]
         the simulation configuration dictionary.
     """
 
-    def __init__(self, parent: str, sim_config: Dict[str, Any]) -> None:
+    def __init__(self, parent: str, sim_config: Mapping[str, Any]) -> None:
         self._config = sim_config
         self._dir_path = (Path(parent) / "simulations").resolve()
 
@@ -147,7 +147,7 @@ class SimAccess(abc.ABC):
         return self._dir_path
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         """Dict[str, Any]: simulation configurations."""
         return self._config
 
@@ -167,8 +167,61 @@ class SimProcessManager(SimAccess, abc.ABC):
         the simulation configuration dictionary.
     """
 
-    def __init__(self, tmp_dir: str, sim_config: Dict[str, Any]) -> None:
+    def __init__(self, tmp_dir: str, sim_config: Mapping[str, Any]) -> None:
         SimAccess.__init__(self, tmp_dir, sim_config)
+
+        cancel_timeout = sim_config.get('cancel_timeout_ms', 10000) / 1e3
+        self._manager = SubProcessManager(max_workers=sim_config.get('max_workers', 0),
+                                          cancel_timeout=cancel_timeout)
+
+    @property
+    def manager(self) -> SubProcessManager:
+        return self._manager
+
+
+class EmSimAccess(abc.ABC):
+    """A class that interacts with an EM simulator.
+
+    Parameters
+    ----------
+    parent : str
+        parent directory for EmSimAccess.
+    sim_config : Mapping[str, Any]
+        the simulation configuration dictionary.
+    """
+
+    def __init__(self, parent: str, sim_config: Mapping[str, Any], **kwargs) -> None:
+        self._config = sim_config
+        self._dir_path = (Path(parent) / "em_simulations").resolve()
+
+    @property
+    def dir_path(self) -> Path:
+        """Path: the directory for simulation files."""
+        return self._dir_path
+
+    @property
+    def config(self) -> Mapping[str, Any]:
+        """Dict[str, Any]: simulation configurations."""
+        return self._config
+
+    @abc.abstractmethod
+    def run_simulation(self) -> None:
+        pass
+
+
+class EmSimProcessManager(EmSimAccess, abc.ABC):
+    """An implementation of :class:`EmSimAccess` using :class:`SubProcessManager`.
+
+    Parameters
+    ----------
+    tmp_dir : str
+        temporary file directory for EmSimAccess.
+    sim_config : Mapping[str, Any]
+        the simulation configuration dictionary.
+    """
+
+    def __init__(self, tmp_dir: str, sim_config: Mapping[str, Any], **kwargs) -> None:
+        EmSimAccess.__init__(self, tmp_dir, sim_config, **kwargs)
 
         cancel_timeout = sim_config.get('cancel_timeout_ms', 10000) / 1e3
         self._manager = SubProcessManager(max_workers=sim_config.get('max_workers', 0),
