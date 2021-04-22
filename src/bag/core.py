@@ -977,7 +977,8 @@ class BagProject:
 
         return result
 
-    def em_cell(self, specs: Mapping[str, Any], force_sim: bool = False, log_level: LogLevel = LogLevel.DEBUG) -> None:
+    def run_em_cell(self, specs: Mapping[str, Any], force_sim: bool = False,
+                    log_level: LogLevel = LogLevel.DEBUG) -> None:
         impl_lib: str = specs['impl_lib']
         impl_cell: str = specs['impl_cell']
         root_dir: Union[str, Path] = specs['root_dir']
@@ -998,10 +999,10 @@ class BagProject:
                 self.export_layout(impl_lib, impl_cell, str(gds_file))
 
             em_sim_cls = cast(Type['EmSimAccess'], import_class(self.bag_config['em_simulation']['class']))
-            em_obj: Optional[EmSimAccess] = em_sim_cls(get_bag_tmp_dir(), self.bag_config['em_simulation'],
-                                                       cell_name=impl_cell, gds_file=gds_file, params=params,
-                                                       root_path=root_path)
+            em_obj: EmSimAccess = em_sim_cls(get_bag_tmp_dir(), self.bag_config['em_simulation'],
+                                             cell_name=impl_cell, gds_file=gds_file, params=params, root_path=root_path)
             em_obj.run_simulation()
+            em_obj.process_output()
         else:
             raise NotImplementedError('EM simulation is not set up in bag_config.yaml.')
 

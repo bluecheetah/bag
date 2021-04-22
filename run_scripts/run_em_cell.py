@@ -56,7 +56,7 @@ def run_main(prj: BagProject, args: argparse.Namespace) -> None:
     specs: Mapping[str, Any] = read_yaml(args.specs)
 
     log_level = LogLevel.WARN if args.quiet else LogLevel.INFO
-    prj.em_cell(specs, force_sim=args.force_sim, log_level=log_level)
+    prj.run_em_cell(specs, force_sim=args.force_sim, log_level=log_level)
 
 
 if __name__ == '__main__':

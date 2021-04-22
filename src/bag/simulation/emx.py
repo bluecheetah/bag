@@ -227,56 +227,59 @@ class EMXInterface(EmSimProcessManager):
         coro = self.async_gen_model()
         batch_async_task([coro])
 
-        self.calculate_ind_q()
-
-    def calculate_ind_q(self) -> None:
-        """
-        Calculate inductance and Q for given y parameter file.
-        """
+    def process_output(self) -> None:
+        # calculate inductance and quality factor
         center_tap = self._params.get('center_tap', False)
         print(f'center_tap is {center_tap}')
-        ym_file = self._model_path / f'{self._cell_name}.y'
-        try:
-            with open(ym_file, 'r') as f:
-                lines = f.readlines()
-        except FileNotFoundError:
-            print(f'Y parameter file {ym_file} is not found')
-        else:
-            results = []
-            for i, line in enumerate(lines):
-                yparam = np.fromstring(line, sep=' ')
-                # get frequency and real yparam
-                f = yparam[0]
-                yparam = yparam[1:]
-                if center_tap:
-                    # get real part and imag part
-                    real_part = yparam[::2].reshape(3, 3)
-                    imag_part = yparam[1::2].reshape(3, 3)
-                    # get complex value
-                    y = real_part + imag_part * 1j
-                    # get z parameters
-                    zdiff = 2 * np.divide(y[1, 2] + y[0, 2],
-                                          np.multiply(y[1, 2], (y[0, 0] - y[0, 1])) -
-                                          np.multiply(y[0, 2], (y[1, 0] - y[1, 1])))
-                else:
-                    # get real part and imag part
-                    real_part = yparam[::2].reshape(2, 2)
-                    imag_part = yparam[1::2].reshape(2, 2)
-                    # get complex value
-                    y = real_part + imag_part * 1j
-                    # get z parameters
-                    zdiff = np.divide(4, y[0, 0] + y[1, 1] - y[0, 1] - y[1, 0])
+        calculate_ind_q(self._model_path, self._cell_name, center_tap)
 
-                z11 = np.divide(1, y[0, 0])
-                z22 = np.divide(1, y[1, 1])
 
-                # get l and qs
-                ldiff0 = np.imag(zdiff)/2/np.pi/f if f != 0 else 0.0
-                qdiff0 = np.imag(zdiff) / np.real(zdiff)
+def calculate_ind_q(model_path: Path, cell_name: str, center_tap: bool) -> None:
+    """
+    Calculate inductance and Q for given y parameter file.
+    """
+    ym_file = model_path / f'{cell_name}.y'
+    try:
+        with open(ym_file, 'r') as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        print(f'Y parameter file {ym_file} is not found')
+    else:
+        results = []
+        for i, line in enumerate(lines):
+            yparam = np.fromstring(line, sep=' ')
+            # get frequency and real yparam
+            f = yparam[0]
+            yparam = yparam[1:]
+            if center_tap:
+                # get real part and imag part
+                real_part = yparam[::2].reshape(3, 3)
+                imag_part = yparam[1::2].reshape(3, 3)
+                # get complex value
+                y = real_part + imag_part * 1j
+                # get z parameters
+                zdiff = 2 * np.divide(y[1, 2] + y[0, 2],
+                                      np.multiply(y[1, 2], (y[0, 0] - y[0, 1])) -
+                                      np.multiply(y[0, 2], (y[1, 0] - y[1, 1])))
+            else:
+                # get real part and imag part
+                real_part = yparam[::2].reshape(2, 2)
+                imag_part = yparam[1::2].reshape(2, 2)
+                # get complex value
+                y = real_part + imag_part * 1j
+                # get z parameters
+                zdiff = np.divide(4, y[0, 0] + y[1, 1] - y[0, 1] - y[1, 0])
 
-                # add to list
-                results.append(dict(freq=float(f), ldiff=float(ldiff0), qdiff=float(qdiff0)))
+            z11 = np.divide(1, y[0, 0])
+            z22 = np.divide(1, y[1, 1])
 
-            result_yaml = self._model_path / f'{self._cell_name}.yaml'
-            write_yaml(result_yaml, results)
-            print(f'Results are in {result_yaml}.')
+            # get l and qs
+            ldiff0 = np.imag(zdiff)/2/np.pi/f if f != 0 else 0.0
+            qdiff0 = np.imag(zdiff) / np.real(zdiff)
+
+            # add to list
+            results.append(dict(freq=float(f), ldiff=float(ldiff0), qdiff=float(qdiff0)))
+
+        result_yaml = model_path / f'{cell_name}.yaml'
+        write_yaml(result_yaml, results)
+        print(f'Results are in {result_yaml}.')

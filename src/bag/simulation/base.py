@@ -208,6 +208,10 @@ class EmSimAccess(abc.ABC):
     def run_simulation(self) -> None:
         pass
 
+    @abc.abstractmethod
+    def process_output(self) -> None:
+        pass
+
 
 class EmSimProcessManager(EmSimAccess, abc.ABC):
     """An implementation of :class:`EmSimAccess` using :class:`SubProcessManager`.
