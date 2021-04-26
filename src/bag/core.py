@@ -1001,7 +1001,10 @@ class BagProject:
             em_sim_cls = cast(Type['EmSimAccess'], import_class(self.bag_config['em_simulation']['class']))
             em_obj: EmSimAccess = em_sim_cls(get_bag_tmp_dir(), self.bag_config['em_simulation'],
                                              cell_name=impl_cell, gds_file=gds_file, params=params, root_path=root_path)
-            em_obj.run_simulation()
+            if force_sim:
+                em_obj.run_simulation()
+            else:
+                print('Skipping EM simulation and using old results. Use "--force_sim" to force EM simulation.')
             em_obj.process_output()
         else:
             raise NotImplementedError('EM simulation is not set up in bag_config.yaml.')

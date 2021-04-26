@@ -31,6 +31,7 @@
 import os
 import time
 import numpy as np
+import matplotlib.pyplot as plt
 
 from typing import Mapping, Any, List, Tuple
 from pathlib import Path
@@ -125,16 +126,16 @@ class EMXInterface(EmSimProcessManager):
         # y matlab file
         ym_file = self._model_path / f'{self._cell_name}.y'
         ym_opts = ['--format=matlab', '-y', str(ym_file)]
-        # pz model
-        state_file = self._model_path / f'{self._cell_name}.pz'
-        st_opts = ['--format=spectre', f'--model-file={state_file}', '--save-model-state']
+        # pz model (removed as it slows down simulation)
+        # state_file = self._model_path / f'{self._cell_name}.pz'
+        # st_opts = ['--format=spectre', f'--model-file={state_file}', '--save-model-state']
 
         # log file
         log_file = self._model_path / f'{self._cell_name}.log'
         log_opts = [f'--log-file={log_file}']
 
         # other options
-        other_opts = ['--parallel=4', '--max-memory=80%', '--simultaneous-frequencies=0']
+        other_opts = ['--parallel=4', '--max-memory=80%', '--simultaneous-frequencies=0', '--quasistatic']
 
         # get extra options
         extra_opts = []
@@ -148,8 +149,8 @@ class EMXInterface(EmSimProcessManager):
             extra_opts.append(f'--key={self._key}')
 
         emx_opts = mesh_opts + freq_opts + port_string + pr_opts + cmd_opts + extra_opts + sp_opts + yp_opts + \
-                   ym_opts + st_opts + log_opts + other_opts
-        return emx_opts, [sp_file, yp_file, ym_file, state_file, log_file]
+                   ym_opts + log_opts + other_opts
+        return emx_opts, [sp_file, yp_file, ym_file, log_file]
 
     async def async_gen_nport(self) -> None:
         """
@@ -246,10 +247,15 @@ def calculate_ind_q(model_path: Path, cell_name: str, center_tap: bool) -> None:
         print(f'Y parameter file {ym_file} is not found')
     else:
         results = []
+        num = len(lines)
+        freq = np.zeros(num)
+        ldiff = np.zeros(num)
+        qdiff = np.zeros(num)
+        zdiff = np.zeros(num, dtype=np.complex_)
         for i, line in enumerate(lines):
             yparam = np.fromstring(line, sep=' ')
             # get frequency and real yparam
-            f = yparam[0]
+            freq[i] = yparam[0]
             yparam = yparam[1:]
             if center_tap:
                 # get real part and imag part
@@ -258,9 +264,9 @@ def calculate_ind_q(model_path: Path, cell_name: str, center_tap: bool) -> None:
                 # get complex value
                 y = real_part + imag_part * 1j
                 # get z parameters
-                zdiff = 2 * np.divide(y[1, 2] + y[0, 2],
-                                      np.multiply(y[1, 2], (y[0, 0] - y[0, 1])) -
-                                      np.multiply(y[0, 2], (y[1, 0] - y[1, 1])))
+                zdiff0 = 2 * np.divide(y[1, 2] + y[0, 2],
+                                       np.multiply(y[1, 2], (y[0, 0] - y[0, 1])) -
+                                       np.multiply(y[0, 2], (y[1, 0] - y[1, 1])))
             else:
                 # get real part and imag part
                 real_part = yparam[::2].reshape(2, 2)
@@ -268,18 +274,42 @@ def calculate_ind_q(model_path: Path, cell_name: str, center_tap: bool) -> None:
                 # get complex value
                 y = real_part + imag_part * 1j
                 # get z parameters
-                zdiff = np.divide(4, y[0, 0] + y[1, 1] - y[0, 1] - y[1, 0])
+                zdiff0 = np.divide(4, y[0, 0] + y[1, 1] - y[0, 1] - y[1, 0])
 
-            z11 = np.divide(1, y[0, 0])
-            z22 = np.divide(1, y[1, 1])
+            # z11 = np.divide(1, y[0, 0])
+            # z22 = np.divide(1, y[1, 1])
 
             # get l and qs
-            ldiff0 = np.imag(zdiff)/2/np.pi/f if f != 0 else 0.0
-            qdiff0 = np.imag(zdiff) / np.real(zdiff)
+            ldiff[i] = np.imag(zdiff0)/2/np.pi/freq[i] if freq[i] != 0 else 0.0
+            qdiff[i] = np.imag(zdiff0) / np.real(zdiff0)
+            zdiff[i] = zdiff0
 
             # add to list
-            results.append(dict(freq=float(f), ldiff=float(ldiff0), qdiff=float(qdiff0)))
+            results.append(dict(freq=float(freq[i]), ldiff=float(ldiff[i]), qdiff=float(qdiff[i])))
 
+        # store results
         result_yaml = model_path / f'{cell_name}.yaml'
         write_yaml(result_yaml, results)
         print(f'Results are in {result_yaml}.')
+
+        # find max Q
+        q_max_idx = np.argmax(qdiff)
+        q_max = qdiff[q_max_idx]
+        q_max_freq = freq[q_max_idx]
+        print(f'Max Q is {q_max} at {q_max_freq / 1e9} GHz.')
+
+        # find self resonant frequency
+        srf_idx = np.argmax(np.abs(zdiff))
+        srf_freq = freq[srf_idx]
+        print(f'Self resonant frequency is {srf_freq / 1e9} GHz.')
+
+        # plot results
+        fig, (ax0, ax1) = plt.subplots(2)
+        ax0.plot(freq / 1e9, ldiff * 1e12)
+        ax0.set_xlabel('Frequency (GHz)')
+        ax0.set_ylabel('Inductance (pH)')
+        ax1.plot(freq / 1e9, qdiff)
+        ax1.set_xlabel('Frequency (GHz)')
+        ax1.set_ylabel('Quality factor')
+        plt.tight_layout()
+        plt.show()
