@@ -995,8 +995,7 @@ class BagProject:
 
         # make EM_SimAccess instance if it is defined in bag_config.yaml
         if 'em_simulation' in self.bag_config:
-            if not gds_file.exists():
-                self.export_layout(impl_lib, impl_cell, str(gds_file))
+            self.export_layout(impl_lib, impl_cell, str(gds_file))
 
             em_sim_cls = cast(Type['EmSimAccess'], import_class(self.bag_config['em_simulation']['class']))
             em_obj: EmSimAccess = em_sim_cls(get_bag_tmp_dir(), self.bag_config['em_simulation'],

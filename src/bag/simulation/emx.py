@@ -107,8 +107,9 @@ class EMXInterface(EmSimProcessManager):
         portlist_n = port_list.copy()
         gndlist_n = gnd_list.copy()
         # remove repeated ports
-        for port in gndlist_n:
-            portlist_n.remove(port)
+        for gnd in gndlist_n:
+            if gnd in portlist_n:
+                portlist_n.remove(gnd)
         port_string = []
         for idx, port in enumerate(portlist_n):
             port_string.extend(['-p', f'P{idx:02d}={port}', '-i', f'P{idx:02d}'])
@@ -135,7 +136,8 @@ class EMXInterface(EmSimProcessManager):
         log_opts = [f'--log-file={log_file}']
 
         # other options
-        other_opts = ['--parallel=4', '--max-memory=80%', '--simultaneous-frequencies=0', '--quasistatic']
+        other_opts = ['--parallel=4', '--max-memory=80%', '--simultaneous-frequencies=0', '--quasistatic',
+                      '--dump-connectivity']
 
         # get extra options
         extra_opts = []
@@ -148,8 +150,8 @@ class EMXInterface(EmSimProcessManager):
         if self._key:
             extra_opts.append(f'--key={self._key}')
 
-        emx_opts = mesh_opts + freq_opts + port_string + pr_opts + cmd_opts + extra_opts + sp_opts + yp_opts + \
-                   ym_opts + log_opts + other_opts
+        emx_opts = mesh_opts + freq_opts + port_string + pr_opts + cmd_opts + extra_opts + other_opts + sp_opts + \
+                   yp_opts + ym_opts + log_opts
         return emx_opts, [sp_file, yp_file, ym_file, log_file]
 
     async def async_gen_nport(self) -> None:
@@ -267,6 +269,12 @@ def calculate_ind_q(model_path: Path, cell_name: str, center_tap: bool) -> None:
                 zdiff0 = 2 * np.divide(y[1, 2] + y[0, 2],
                                        np.multiply(y[1, 2], (y[0, 0] - y[0, 1])) -
                                        np.multiply(y[0, 2], (y[1, 0] - y[1, 1])))
+                # det_10 = y[0, 2] * y[2, 1] - y[0, 1] * y[2, 2]
+                # det_01 = y[2, 0] * y[1, 2] - y[1, 0] * y[2, 2]
+                # det_00 = y[1, 1] * y[2, 2] - y[2, 1] * y[1, 2]
+                # det_11 = y[0, 0] * y[2, 2] - y[2, 0] * y[0, 2]
+                # det_ = det_10 * det_01 - det_00 * det_11
+                # zdiff0 = y[2, 2] * (det_10 + det_01 - det_00 - det_11) / det_ if det_ != 0 else 0.0
             else:
                 # get real part and imag part
                 real_part = yparam[::2].reshape(2, 2)
@@ -275,13 +283,15 @@ def calculate_ind_q(model_path: Path, cell_name: str, center_tap: bool) -> None:
                 y = real_part + imag_part * 1j
                 # get z parameters
                 zdiff0 = np.divide(4, y[0, 0] + y[1, 1] - y[0, 1] - y[1, 0])
+                # det_y = np.linalg.det(y)
+                # zdiff0 = (y[0, 0] + y[0, 1] + y[1, 0] + y[1, 1]) / det_y if det_y != 0 else 0.0
 
             # z11 = np.divide(1, y[0, 0])
             # z22 = np.divide(1, y[1, 1])
 
             # get l and qs
             ldiff[i] = np.imag(zdiff0)/2/np.pi/freq[i] if freq[i] != 0 else 0.0
-            qdiff[i] = np.imag(zdiff0) / np.real(zdiff0)
+            qdiff[i] = np.imag(zdiff0) / np.real(zdiff0) if zdiff0 != 0 else 0.0
             zdiff[i] = zdiff0
 
             # add to list
@@ -308,8 +318,10 @@ def calculate_ind_q(model_path: Path, cell_name: str, center_tap: bool) -> None:
         ax0.plot(freq / 1e9, ldiff * 1e12)
         ax0.set_xlabel('Frequency (GHz)')
         ax0.set_ylabel('Inductance (pH)')
+        ax0.grid()
         ax1.plot(freq / 1e9, qdiff)
         ax1.set_xlabel('Frequency (GHz)')
         ax1.set_ylabel('Quality factor')
+        ax1.grid()
         plt.tight_layout()
         plt.show()
