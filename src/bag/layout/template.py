@@ -73,7 +73,7 @@ from ..design.module import Module
 
 from .core import PyLayInstance
 from .tech import TechInfo
-from .routing.base import Port, TrackID, WireArray
+from .routing.base import Port, TrackID, WireArray, TrackManager
 from .routing.grid import RoutingGrid
 from .data import MOMCapInfo, TemplateEdgeInfo
 
@@ -2626,6 +2626,53 @@ class TemplateBase(DesignMaster):
             master = self.new_template(fill_cls, params=kwargs)
             self.add_instance(master, inst_name=f'XFILL{cnt}', xform=Transform(box.xl, box.yl))
             cnt += 1
+
+    def do_power_fill(self, layer_id: int, tr_manager: TrackManager,
+                      vdd_warrs: Optional[Union[WireArray, List[WireArray]]] = None,
+                      vss_warrs: Optional[Union[WireArray, List[WireArray]]] = None, bound_box: Optional[BBox] = None,
+                      x_margin: int = 0, y_margin: int = 0, sup_type: str = 'both', flip: bool = False
+                      ) -> Tuple[List[WireArray], List[WireArray]]:
+        """Draw power fill on the given layer."""
+        if bound_box is None:
+            if self.bound_box is None:
+                raise ValueError("bound_box is not set")
+            bound_box = self.bound_box
+        bound_box = bound_box.expand(dx=-x_margin, dy=-y_margin)
+        is_horizontal = (self.grid.get_direction(layer_id) == 0)
+        if is_horizontal:
+            cl, cu = bound_box.yl, bound_box.yh
+            lower, upper = bound_box.xl, bound_box.xh
+        else:
+            cl, cu = bound_box.xl, bound_box.xh
+            lower, upper = bound_box.yl, bound_box.yh
+        fill_width = tr_manager.get_width(layer_id, 'sup')
+        fill_space = tr_manager.get_sep(layer_id, ('sup', 'sup'))
+        sep_margin = tr_manager.get_sep(layer_id, ('sup', ''))
+        tr_bot = self.grid.coord_to_track(layer_id, cl, mode=RoundMode.GREATER_EQ)
+        tr_top = self.grid.coord_to_track(layer_id, cu, mode=RoundMode.LESS_EQ)
+        trs = self.get_available_tracks(layer_id, tid_lo=tr_bot, tid_hi=tr_top, lower=lower, upper=upper,
+                                        width=fill_width, sep=fill_space, sep_margin=sep_margin)
+        top_vdd: List[WireArray] = []
+        top_vss: List[WireArray] = []
+        for ncur, tr_idx in enumerate(trs):
+            # tr_idx = (htr0 + ncur * htr_pitch - 1) / 2
+            warr = self.add_wires(layer_id, tr_idx, lower, upper, width=fill_width)
+            if sup_type.lower() == 'vss':
+                top_vss.append(warr)
+            elif sup_type.lower() == 'vdd':
+                top_vdd.append(warr)
+            elif sup_type.lower() == 'both':
+                if (ncur % 2 == 0) != flip:
+                    top_vss.append(warr)
+                else:
+                    top_vdd.append(warr)
+            else:
+                raise ValueError('sup_type has to be "VDD" or "VSS" or "both"(default)')
+        if vdd_warrs:
+            self.draw_vias_on_intersections(vdd_warrs, top_vdd)
+        if vss_warrs:
+            self.draw_vias_on_intersections(vss_warrs, top_vss)
+        return top_vdd, top_vss
 
     def get_lef_options(self, options: Dict[str, Any], config: Mapping[str, Any]) -> None:
         """Populate the LEF options dictionary.
