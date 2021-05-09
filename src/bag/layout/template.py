@@ -1272,7 +1272,7 @@ class TemplateBase(DesignMaster):
                           *, num_rows: int = 1, num_cols: int = 1, sp_rows: int = 0,
                           sp_cols: int = 0, enc1: Tuple[int, int, int, int] = (0, 0, 0, 0),
                           enc2: Tuple[int, int, int, int] = (0, 0, 0, 0), nx: int = 1, ny: int = 1,
-                          spx: int = 0, spy: int = 0) -> None:
+                          spx: int = 0, spy: int = 0, priority: int = 1) -> None:
         """Adds via(s) by specifying all parameters.
 
         Parameters
@@ -1307,11 +1307,13 @@ class TemplateBase(DesignMaster):
             column pitch.
         spy : int
             row pitch.
+        priority : int
+            via priority, defaults to 1
         """
         l1, r1, t1, b1 = enc1
         l2, r2, t2, b2 = enc2
         param = ViaParam(num_cols, num_rows, cut_width, cut_height, sp_cols, sp_rows,
-                         l1, r1, t1, b1, l2, r2, t2, b2)
+                         l1, r1, t1, b1, l2, r2, t2, b2, priority)
         self._layout.add_via_arr(xform, via_type, param, True, nx, ny, spx, spy)
 
     def add_via_on_grid(self, tid1: TrackID, tid2: TrackID, *, extend: bool = True
