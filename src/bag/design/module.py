@@ -645,6 +645,7 @@ class Module(DesignMaster):
             'analogLib': {
                 'cap': 'C{}',
                 'idc': 'IDC{}',
+                'isin': 'IAC{}',
                 'res': 'R{}',
                 'vcvs': 'VCVS{}',
                 'vdc': 'VDC{}',
@@ -657,12 +658,13 @@ class Module(DesignMaster):
             'analogLib': {
                 'cap': 'c',
                 'idc': 'idc',
+                'isin': 'acm',
                 'res': 'r',
                 'vcvs': 'egain',
                 'vdc': 'vdc',
                 'vpulse': None,
                 'vpwlf': 'fileName',
-                'vsin': None,
+                'vsin': 'acm',
             },
         }
 
