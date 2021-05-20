@@ -30,7 +30,7 @@
 
 # -*- coding: utf-8 -*-
 
-from typing import Dict, Any
+from typing import Mapping, Any
 
 import pkg_resources
 from pathlib import Path
@@ -55,12 +55,12 @@ class {{ lib_name }}__{{ cell_name }}(Module):
         Module.__init__(self, self.yaml_file, database, params, **kwargs)
 
     @classmethod
-    def get_params_info(cls) -> Dict[str, str]:
+    def get_params_info(cls) -> Mapping[str, str]:
         """Returns a dictionary from parameter names to descriptions.
 
         Returns
         -------
-        param_info : Optional[Dict[str, str]]
+        param_info : Optional[Mapping[str, str]]
             dictionary from parameter names to descriptions.
         """
         return dict(

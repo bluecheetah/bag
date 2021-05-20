@@ -119,7 +119,7 @@ class Module(DesignMaster):
         DesignMaster.__init__(self, database, params, copy_state=copy_state, **kwargs)
 
     @classmethod
-    def get_hidden_params(cls) -> Dict[str, Any]:
+    def get_hidden_params(cls) -> Mapping[str, Any]:
         ans = DesignMaster.get_hidden_params()
         ans['model_params'] = None
         return ans
@@ -152,7 +152,7 @@ class Module(DesignMaster):
     def get_master_basename(self) -> str:
         return self.orig_cell_name
 
-    def get_copy_state_with(self, new_params: Param) -> Dict[str, Any]:
+    def get_copy_state_with(self, new_params: Param) -> Mapping[str, Any]:
         base = DesignMaster.get_copy_state_with(self, new_params)
         new_cv = self._cv.get_copy()
         new_inst = {name: SchInstance(self.sch_db, ref, master=self.instances[name].master)
@@ -176,7 +176,7 @@ class Module(DesignMaster):
         return tech_info.resolution * tech_info.layout_unit
 
     @property
-    def pins(self) -> Dict[str, TermType]:
+    def pins(self) -> Mapping[str, TermType]:
         return self._pins
 
     @abc.abstractmethod
@@ -350,7 +350,7 @@ class Module(DesignMaster):
         """
         return False
 
-    def get_schematic_parameters(self) -> Dict[str, str]:
+    def get_schematic_parameters(self) -> Mapping[str, str]:
         """Returns the schematic parameter dictionary of this instance.
 
         NOTE: This method is only used by BAG primitives, as they are
@@ -359,7 +359,7 @@ class Module(DesignMaster):
 
         Returns
         -------
-        params : Dict[str, str]
+        params : Mapping[str, str]
             the schematic parameter dictionary.
         """
         return {}
@@ -791,7 +791,7 @@ class Module(DesignMaster):
             the threshold flavor.
         m : str
             base name of the intermediate nodes.  the intermediate nodes will be named
-            'midX', where X is an non-negative integer.
+            'midX', where X is a non-negative integer.
         d : str
             the drain name.  Empty string to not rename.
         g : Union[str, List[str]]
@@ -883,6 +883,65 @@ class Module(DesignMaster):
 
                 self.array_instance(inst_name, inst_term_list=inst_term_list)
 
+    def design_resistor(self, inst_name: str, unit_params: Mapping[str, Any], nser: int = 1, npar: int = 1,
+                        plus: str = '', minus: str = '', mid: str = '') -> None:
+        """Design a BAG_prim resistor (with series / parallel support).
+
+        This is a convenient method to design a resistor consisting of a series / parallel network of resistor units.
+        For series connections, additional resistors will be created on the right.
+
+        Parameters
+        ----------
+        inst_name : str
+            name of the BAG_prim resistor instance.
+        unit_params : int
+           Parameters of the unit resistor.
+        nser : int
+            number of resistor units in series.
+        npar : int
+            number of resistor units in parallel.
+        plus : str
+            the plus terminal name.  Empty string to not rename.
+        minus : str
+            the minus terminal name.  Empty string to not rename.
+        mid : str
+            base name of the intermediate nodes for series connection. The intermediate nodes will be named 'mid_X',
+            where X is a non-negative integer.
+        """
+        inst = self.instances[inst_name]
+        inst.design(**unit_params)
+        if not issubclass(inst.master_class, ResPhysicalModuleBase):
+            raise ValueError('This method only works on BAG_prim resistors.')
+        if nser <= 0 or npar <= 0:
+            raise ValueError(f'nser={nser} and npar={npar} must be positive')
+
+        if not plus:
+            plus = inst.get_connection('PLUS')
+        if not minus:
+            minus = inst.get_connection('MINUS')
+
+        # series: array by adding more instances
+        if nser > 1:
+            if not mid:
+                raise ValueError('Intermediate node base name mid cannot be empty.')
+            inst_term_list = []
+            inst_names = []
+            for sidx in range(nser):
+                _name = f'{inst_name}_{sidx}'
+                inst_names.append(_name)
+                _minus = minus if sidx == 0 else f'{mid}_{sidx - 1}'
+                _plus = plus if sidx == nser - 1 else f'{mid}_{sidx}'
+                inst_term_list.append((_name, [('PLUS', _plus), ('MINUS', _minus)]))
+            self.array_instance(inst_name, inst_term_list=inst_term_list)
+        else:
+            inst_names = [inst_name]
+
+        # parallel: array by naming
+        if npar > 1:
+            suf = f'<{npar - 1}:0>'
+            for _name in inst_names:
+                self.rename_instance(_name, _name + suf)
+
     def replace_with_ideal_switch(self, inst_name: str, rclosed: str = 'rclosed',
                                   ropen: str = 'ropen', vclosed: str = 'vclosed',
                                   vopen: str = 'vopen'):
@@ -938,7 +997,7 @@ class Module(DesignMaster):
 
     def get_instance_hierarchy(self, output_type: DesignOutput,
                                leaf_cells: Optional[Dict[str, List[str]]] = None,
-                               default_view_name: str = '') -> Dict[str, Any]:
+                               default_view_name: str = '') -> Mapping[str, Any]:
         """Returns a nested dictionary representing the modeling instance hierarchy.
 
         By default, we try to netlist as deeply as possible.  This behavior can be modified by
@@ -955,7 +1014,7 @@ class Module(DesignMaster):
 
         Returns
         -------
-        hier : Dict[str, Any]
+        hier : Mapping[str, Any]
             the instance hierarchy dictionary.
         """
         is_leaf_table = {}
@@ -967,9 +1026,9 @@ class Module(DesignMaster):
         return self._get_hierarchy_helper(output_type, is_leaf_table, default_view_name)
 
     def _get_hierarchy_helper(self, output_type: DesignOutput,
-                              is_leaf_table: Dict[Tuple[str, str], bool],
+                              is_leaf_table: Mapping[Tuple[str, str], bool],
                               default_view_name: str,
-                              ) -> Optional[Dict[str, Any]]:
+                              ) -> Optional[Mapping[str, Any]]:
         model_path = self.get_model_path(output_type, default_view_name)
 
         key = (self._orig_lib_name, self._orig_cell_name)
@@ -1023,7 +1082,7 @@ class MosModuleBase(Module):
         return True
 
     @classmethod
-    def get_params_info(cls) -> Dict[str, str]:
+    def get_params_info(cls) -> Mapping[str, str]:
         return dict(
             w='transistor width, in resolution units or number of fins.',
             l='transistor length, in resolution units.',
@@ -1034,7 +1093,7 @@ class MosModuleBase(Module):
     def design(self, w: int, l: int, nf: int, intent: str) -> None:
         pass
 
-    def get_schematic_parameters(self) -> Dict[str, str]:
+    def get_schematic_parameters(self) -> Mapping[str, str]:
         w_res = self.tech_info.tech_params['mos']['width_resolution']
         l_res = self.tech_info.tech_params['mos']['length_resolution']
         scale = self.sch_scale
@@ -1071,7 +1130,7 @@ class DiodeModuleBase(Module):
         return True
 
     @classmethod
-    def get_params_info(cls) -> Dict[str, str]:
+    def get_params_info(cls) -> Mapping[str, str]:
         return dict(
             w='diode width, in resolution units or number of fins.',
             l='diode length, in resolution units or number of fingers.',
@@ -1081,7 +1140,7 @@ class DiodeModuleBase(Module):
     def design(self, w: int, l: int, intent: str) -> None:
         pass
 
-    def get_schematic_parameters(self) -> Dict[str, str]:
+    def get_schematic_parameters(self) -> Mapping[str, str]:
         w_res = self.tech_info.tech_params['diode']['width_resolution']
         l_res = self.tech_info.tech_params['diode']['length_resolution']
 
@@ -1117,7 +1176,7 @@ class ResPhysicalModuleBase(Module):
         return True
 
     @classmethod
-    def get_params_info(cls) -> Dict[str, str]:
+    def get_params_info(cls) -> Mapping[str, str]:
         return dict(
             w='resistor width, in resolution units.',
             l='resistor length, in resolution units.',
@@ -1127,7 +1186,7 @@ class ResPhysicalModuleBase(Module):
     def design(self, w: int, l: int, intent: str) -> None:
         pass
 
-    def get_schematic_parameters(self) -> Dict[str, str]:
+    def get_schematic_parameters(self) -> Mapping[str, str]:
         w: int = self.params['w']
         l: int = self.params['l']
         scale = self.sch_scale
@@ -1156,7 +1215,7 @@ class ResMetalModule(Module):
         return True
 
     @classmethod
-    def get_params_info(cls) -> Dict[str, str]:
+    def get_params_info(cls) -> Mapping[str, str]:
         return dict(
             w='resistor width, in resolution units.',
             l='resistor length, in resolution units.',
@@ -1166,7 +1225,7 @@ class ResMetalModule(Module):
     def design(self, w: int, l: int, layer: int) -> None:
         pass
 
-    def get_schematic_parameters(self) -> Dict[str, str]:
+    def get_schematic_parameters(self) -> Mapping[str, str]:
         w: int = self.params['w']
         l: int = self.params['l']
         scale = self.sch_scale
