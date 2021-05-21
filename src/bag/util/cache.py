@@ -233,18 +233,18 @@ class DesignMaster(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def get_params_info(cls) -> Dict[str, str]:
+    def get_params_info(cls) -> Mapping[str, str]:
         """Returns a dictionary from parameter names to descriptions.
 
         Returns
         -------
-        param_info : Dict[str, str]
+        param_info : Mapping[str, str]
             dictionary from parameter names to descriptions.
         """
         return {}
 
     @classmethod
-    def get_default_param_values(cls) -> Dict[str, Any]:
+    def get_default_param_values(cls) -> Mapping[str, Any]:
         """Returns a dictionary containing default parameter values.
 
         Override this method to define default parameter values.  As good practice,
@@ -254,7 +254,7 @@ class DesignMaster(abc.ABC):
 
         Returns
         -------
-        default_params : Dict[str, Any]
+        default_params : Mapping[str, Any]
             dictionary of default parameter values.
         """
         return {}

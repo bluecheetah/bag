@@ -536,8 +536,8 @@ class TemplateBase(DesignMaster):
             raise ValueError('lower-left corner of array box must be in first quadrant.')
 
         # noinspection PyAttributeOutsideInit
-        self.size = grid.get_size_tuple(top_layer_id, 2 * dx + self.array_box.width_unit,
-                                        2 * dy + self.array_box.height_unit)
+        self.size = grid.get_size_tuple(top_layer_id, 2 * dx + self.array_box.w,
+                                        2 * dy + self.array_box.h)
 
     def get_pin_name(self, name: str) -> str:
         """Get the actual name of the given pin from the renaming dictionary.
