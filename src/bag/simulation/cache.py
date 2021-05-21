@@ -162,8 +162,9 @@ class DesignDB(LoggingBase):
 
     def new_design(self, impl_cell: str, lay_cls: Union[Type[TemplateBase], Type[Module], str],
                    dut_params: Mapping[str, Any], extract: Optional[bool] = None,
-                   rcx_params: Optional[Mapping[str, Any]] = None) -> DesignInstance:
-        coro = self.async_new_design(impl_cell, lay_cls, dut_params, extract=extract, rcx_params=rcx_params)
+                   rcx_params: Optional[Mapping[str, Any]] = None, export_lay: bool = False) -> DesignInstance:
+        coro = self.async_new_design(impl_cell, lay_cls, dut_params, extract=extract, rcx_params=rcx_params,
+                                     export_lay=export_lay)
         results = batch_async_task([coro])
         if results is None:
             self.error('Design generation cancelled')
@@ -362,8 +363,9 @@ class SimulationDB(LoggingBase):
 
     def new_design(self, impl_cell: str, lay_cls: Union[Type[TemplateBase], Type[Module], str],
                    dut_params: Mapping[str, Any], extract: Optional[bool] = None,
-                   rcx_params: Optional[Mapping[str, Any]] = None) -> DesignInstance:
-        return self._dsn_db.new_design(impl_cell, lay_cls, dut_params, extract=extract, rcx_params=rcx_params)
+                   rcx_params: Optional[Mapping[str, Any]] = None, export_lay: bool = False) -> DesignInstance:
+        return self._dsn_db.new_design(impl_cell, lay_cls, dut_params, extract=extract, rcx_params=rcx_params,
+                                       export_lay=export_lay)
 
     def simulate_tbm(self, sim_id: str, sim_dir: Path, dut: DesignInstance,
                      tbm_cls: Union[Type[TestbenchManager], str],

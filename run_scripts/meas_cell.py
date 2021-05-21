@@ -31,8 +31,8 @@ def parse_options() -> argparse.Namespace:
     parser.add_argument('specs', help='Design specs file name.')
     parser.add_argument('-x', '--extract', action='store_true', default=False,
                         help='Run extracted simulation')
-    parser.add_argument('-c', '--gen_sch', action='store_true', default=False,
-                        help='Generate testbench schematics for debugging.')
+    parser.add_argument('-c', '--gen_cell', action='store_true', default=False,
+                        help='Generate testbench schematics and DUT for debugging.')
     parser.add_argument('-q', '--quiet', action='store_true', default=False,
                         help='Print only warning messages or above.')
     parser.add_argument('-f', '--fake', action='store_true', default=False,
@@ -50,7 +50,7 @@ def run_main(prj: BagProject, args: argparse.Namespace) -> None:
 
     log_level = LogLevel.WARN if args.quiet else LogLevel.INFO
     prj.measure_cell(specs, extract=args.extract, force_sim=args.force_sim,
-                     force_extract=args.force_extract, gen_sch=args.gen_sch,
+                     force_extract=args.force_extract, gen_cell=args.gen_cell,
                      log_level=log_level, fake=args.fake)
 
 

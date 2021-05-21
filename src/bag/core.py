@@ -844,7 +844,7 @@ class BagProject:
         return sim_result
 
     def measure_cell(self, specs: Mapping[str, Any], extract: bool = False,
-                     force_sim: bool = False, force_extract: bool = False, gen_sch: bool = False,
+                     force_sim: bool = False, force_extract: bool = False, gen_cell: bool = False,
                      fake: bool = False, log_level: LogLevel = LogLevel.DEBUG) -> None:
         meas_str: Union[str, Type[MeasurementManager]] = specs['meas_class']
         meas_name: str = specs['meas_name']
@@ -883,7 +883,7 @@ class BagProject:
         dsn_options = dict(
             extract=extract,
             force_extract=force_extract,
-            gen_sch=gen_sch,
+            gen_sch=gen_cell,
             log_level=log_level,
         )
         log_file = str(meas_path / 'meas.log')
@@ -891,7 +891,8 @@ class BagProject:
                                                 dsn_options=dsn_options, force_sim=force_sim,
                                                 precision=precision, log_level=log_level)
 
-        dut = sim_db.new_design(impl_cell, dut_cls, dut_params, extract=extract, rcx_params=rcx_params)
+        dut = sim_db.new_design(impl_cell, dut_cls, dut_params, extract=extract, rcx_params=rcx_params,
+                                export_lay=gen_cell & extract)
         meas_params['fake'] = fake
         mm = sim_db.make_mm(meas_cls, meas_params)
         result = sim_db.simulate_mm_obj(meas_name, meas_path / meas_name, dut, mm)
