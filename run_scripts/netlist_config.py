@@ -47,7 +47,7 @@ Please run this script through the generate_netlist_config.sh shell script, whic
 the PYTHONPATH correctly.
 """
 
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Any, Tuple, List, Union
 
 import copy
 import argparse
@@ -666,7 +666,7 @@ def populate_mos(config: Dict[str, Any], netlist_map: Dict[str, Any],
                 lines.append(
                     mos_template.render(
                         cell_name=cell_name,
-                        model_name=model_name,
+                        model_name=_get_model_name(model_name, v.name),
                         param_list=param_list,
                     ))
 
@@ -692,7 +692,7 @@ def populate_diode(config: Dict[str, Any], netlist_map: Dict[str, Any],
                 lines.append(
                     jinja_template.render(
                         cell_name=cell_name,
-                        model_name=model_name,
+                        model_name=_get_model_name(model_name, v.name),
                         ports=ports,
                         param_list=param_list,
                     ))
@@ -721,7 +721,7 @@ def populate_res_metal(config: Dict[str, Any], netlist_map: Dict[str, Any],
                 lines.append(
                     res_metal_template.render(
                         cell_name=cell_name,
-                        model_name=model_name,
+                        model_name=_get_model_name(model_name, v.name),
                         param_list=new_param_list,
                     ))
 
@@ -738,18 +738,21 @@ def populate_res(config: Dict[str, Any], netlist_map: Dict[str, Any], inc_lines:
             param_list = config[v.name]
             template_name = supported_formats[v]['res']
             if template_name:
-                if isinstance(model_name, dict):
-                    _model_name = model_name[v.name]
-                else:
-                    _model_name = model_name
                 res_template = jinja_env.get_template(template_name)
                 lines.append('\n')
                 lines.append(
                     res_template.render(
                         cell_name=cell_name,
-                        model_name=_model_name,
+                        model_name=_get_model_name(model_name, v.name),
                         param_list=param_list,
                     ))
+
+
+def _get_model_name(model_name: Union[str, Dict[str, str]], key: str) -> str:
+    if isinstance(model_name, str):
+        return model_name
+    else:
+        return model_name[key]
 
 
 def populate_custom_cells(inc_lines: Dict[DesignOutput, List[str]]):
