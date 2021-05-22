@@ -206,6 +206,19 @@ netlist_map_default = {
             'out_terms': [],
             'props': {}
         },
+        'ipwlf': {
+            'lib_name': 'analogLib',
+            'cell_name': 'ipwlf',
+            'in_terms': [],
+            'io_terms': ['PLUS', 'MINUS'],
+            'is_prim': True,
+            'nets': [],
+            'out_terms': [],
+            'props': {
+                'fileName': [3, ''],
+                'srcType': [3, 'pwl'],
+            }
+        },
         'ipulse': {
             'lib_name': 'analogLib',
             'cell_name': 'ipulse',
@@ -249,6 +262,62 @@ netlist_map_default = {
             'out_terms': [],
             'props': {},
             'ignore': True,
+        },
+        'n1port': {
+            'lib_name': 'analogLib',
+            'cell_name': 'n1port',
+            'in_terms': [],
+            'io_terms': ['t1', 'b1'],
+            'is_prim': True,
+            'nets': [],
+            'out_terms': [],
+            'props': {
+                'dataFile': [3, ''],
+                'interp': [3, 'linear'],
+                'thermalnoise': [3, 'yes'],
+            },
+        },
+        'n2port': {
+            'lib_name': 'analogLib',
+            'cell_name': 'n2port',
+            'in_terms': [],
+            'io_terms': ['t1', 'b1', 't2', 'b2'],
+            'is_prim': True,
+            'nets': [],
+            'out_terms': [],
+            'props': {
+                'dataFile': [3, ''],
+                'interp': [3, 'linear'],
+                'thermalnoise': [3, 'yes'],
+            },
+        },
+        'n3port': {
+            'lib_name': 'analogLib',
+            'cell_name': 'n3port',
+            'in_terms': [],
+            'io_terms': ['t1', 'b1', 't2', 'b2', 't3', 'b3'],
+            'is_prim': True,
+            'nets': [],
+            'out_terms': [],
+            'props': {
+                'dataFile': [3, ''],
+                'interp': [3, 'linear'],
+                'thermalnoise': [3, 'yes'],
+            },
+        },
+        'n4port': {
+            'lib_name': 'analogLib',
+            'cell_name': 'n4port',
+            'in_terms': [],
+            'io_terms': ['t1', 'b1', 't2', 'b2', 't3', 'b3', 't4', 'b4'],
+            'is_prim': True,
+            'nets': [],
+            'out_terms': [],
+            'props': {
+                'dataFile': [3, ''],
+                'interp': [3, 'linear'],
+                'thermalnoise': [3, 'yes'],
+            },
         },
         'port': {
             'lib_name': 'analogLib',
@@ -432,6 +501,20 @@ res_metal_default = {
     },
 }
 
+res_default = {
+    'lib_name': 'BAG_prim',
+    'cell_name': '',
+    'in_terms': [],
+    'out_terms': [],
+    'io_terms': ['BULK', 'MINUS', 'PLUS'],
+    'nets': [],
+    'is_prim': True,
+    'props': {
+        'l': [3, ''],
+        'w': [3, ''],
+    },
+}
+
 mos_cdl_fmt = """.SUBCKT {{ cell_name }} B D G S
 *.PININFO B:B D:B G:B S:B
 MM0 D G S B {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
@@ -453,6 +536,12 @@ XD0 {{ ports[0] }} {{ ports[1] }} {{ model_name }}
 res_metal_cdl_fmt = """.SUBCKT {{ cell_name }} MINUS PLUS
 *.PININFO MINUS:B PLUS:B
 RR0 PLUS MINUS {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+.ENDS
+"""
+
+res_cdl_fmt = """.SUBCKT {{ cell_name }} BULK MINUS PLUS
+*.PININFO BULK:B MINUS:B PLUS:B
+XR0 PLUS MINUS BULK {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 .ENDS
 """
 
@@ -480,6 +569,12 @@ RR0 PLUS MINUS {{ model_name }} {% for key, val in param_list %} {{ key }}={{ va
 ends {{ cell_name }}
 """
 
+res_spectre_fmt = """subckt {{ cell_name }} BULK MINUS PLUS
+parameters l w
+XR0 PLUS MINUS BULK {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+ends {{ cell_name }}
+"""
+
 mos_verilog_fmt = """module {{ cell_name }}(
     inout B,
     inout D,
@@ -502,6 +597,7 @@ supported_formats = {
         'diode': 'diode_cdl',
         'diode_static': 'diode_cdl_static',
         'res_metal': 'res_metal_cdl',
+        'res': 'res_cdl',
     },
     DesignOutput.SPECTRE: {
         'fname': 'bag_prim.scs',
@@ -509,6 +605,7 @@ supported_formats = {
         'diode': 'diode_scs',
         'diode_static': 'diode_scs_static',
         'res_metal': 'res_metal_scs',
+        'res': 'res_scs',
     },
     DesignOutput.VERILOG: {
         'fname': 'bag_prim.v',
@@ -516,6 +613,7 @@ supported_formats = {
         'diode': '',
         'diode_static': '',
         'res_metal': '',
+        'res': '',
     },
     DesignOutput.SYSVERILOG: {
         'fname': 'bag_prim.sv',
@@ -523,6 +621,7 @@ supported_formats = {
         'diode': '',
         'diode_static': '',
         'res_metal': '',
+        'res': '',
     },
 }
 
@@ -536,7 +635,9 @@ jinja_env = Environment(
          'diode_cdl_static': dio_cdl_fmt_static,
          'diode_scs_static': dio_spectre_fmt_static,
          'res_metal_cdl': res_metal_cdl_fmt,
-         'res_metal_scs': res_metal_spectre_fmt}),
+         'res_metal_scs': res_metal_spectre_fmt,
+         'res_cdl': res_cdl_fmt,
+         'res_scs': res_spectre_fmt}),
     keep_trailing_newline=True,
 )
 
@@ -625,6 +726,32 @@ def populate_res_metal(config: Dict[str, Any], netlist_map: Dict[str, Any],
                     ))
 
 
+def populate_res(config: Dict[str, Any], netlist_map: Dict[str, Any], inc_lines: Dict[DesignOutput, List[str]]) -> None:
+    for idx, (cell_name, model_name) in enumerate(config['types']):
+        # populate netlist_map
+        cur_info = copy.deepcopy(res_default)
+        cur_info['cell_name'] = cell_name
+        netlist_map[cell_name] = cur_info
+
+        # write bag_prim netlist
+        for v, lines in inc_lines.items():
+            param_list = config[v.name]
+            template_name = supported_formats[v]['res']
+            if template_name:
+                if isinstance(model_name, dict):
+                    _model_name = model_name[v.name]
+                else:
+                    _model_name = model_name
+                res_template = jinja_env.get_template(template_name)
+                lines.append('\n')
+                lines.append(
+                    res_template.render(
+                        cell_name=cell_name,
+                        model_name=_model_name,
+                        param_list=param_list,
+                    ))
+
+
 def populate_custom_cells(inc_lines: Dict[DesignOutput, List[str]]):
     scs_lines = inc_lines[DesignOutput.SPECTRE]
     scs_lines.append('\n')
@@ -641,6 +768,7 @@ def get_info(config: Dict[str, Any], output_dir: Path
     populate_mos(config['mos'], netlist_map, inc_lines)
     populate_diode(config['diode'], netlist_map, inc_lines)
     populate_res_metal(config['res_metal'], netlist_map, inc_lines)
+    populate_res(config['res'], netlist_map, inc_lines)
     populate_custom_cells(inc_lines)
 
     prim_files: Dict[int, str] = {}
