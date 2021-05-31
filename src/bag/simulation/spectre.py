@@ -34,7 +34,7 @@ from ..util.immutable import ImmutableList
 from .data import (
     MDSweepInfo, SimData, SetSweepInfo, SweepLinear, SweepLog, SweepList, SimNetlistInfo,
     SweepSpec, MonteCarlo, AnalysisInfo, AnalysisAC, AnalysisSP, AnalysisNoise, AnalysisTran,
-    AnalysisSweep1D, AnalysisPSS
+    AnalysisSweep1D, AnalysisPSS, AnalysisPNoise
 )
 from .base import SimProcessManager, get_corner_temp
 from .hdf5 import load_sim_data_hdf5, save_sim_data_hdf5
@@ -164,8 +164,9 @@ class SpectreInterface(SimProcessManager):
 
             # write analyses
             save_outputs = set()
+            jitter_event = []
             for ana in analyses:
-                _write_analysis(lines, sim_env, ana, precision, has_ic)
+                jitter_event = _write_analysis(lines, sim_env, ana, precision, has_ic)
                 lines.append('')
                 for output in ana.save_outputs:
                     save_outputs.update(get_cdba_name_bits(output, DesignOutput.SPECTRE))
@@ -175,6 +176,10 @@ class SpectreInterface(SimProcessManager):
                 lines.append('}')
             if num_brackets > 0:
                 lines.append('')
+
+            # jitterevent is not an analysis and has to be written outside sweep analysis (message from Spectre)
+            lines += jitter_event
+            lines.append('')
 
             # write save statements
             _write_save_statements(lines, save_outputs)
@@ -397,7 +402,7 @@ def _write_monte_carlo(lines: List[str], mc: MonteCarlo) -> int:
 
 
 def _write_analysis(lines: List[str], sim_env: str, ana: AnalysisInfo, precision: int,
-                    has_ic: bool) -> None:
+                    has_ic: bool) -> List[str]:
     cur_line = f'__{ana.name}__{sim_env}__'
     if hasattr(ana, 'p_port') and ana.p_port:
         cur_line += f' {ana.p_port}'
@@ -428,8 +433,11 @@ def _write_analysis(lines: List[str], sim_env: str, ana: AnalysisInfo, precision
         elif isinstance(ana, AnalysisNoise):
             if ana.out_probe:
                 cur_line += f' oprobe={ana.out_probe}'
+            elif hasattr(ana, 'measurement') and ana.measurement:
+                meas_list = [f'pm{idx}' for idx in range(len(ana.measurement))]
+                cur_line += f' measurement=[{" ".join(meas_list)}]'
             elif not (hasattr(ana, 'p_port') and ana.p_port):
-                raise ValueError('Either specify out_probe, or specify p_port and n_port')
+                raise ValueError('Either specify out_probe, or specify p_port and n_port, or specify measurement.')
             if ana.in_probe:
                 cur_line += f' iprobe={ana.in_probe}'
     elif isinstance(ana, AnalysisPSS):
@@ -454,6 +462,16 @@ def _write_analysis(lines: List[str], sim_env: str, ana: AnalysisInfo, precision
         cur_line += ' save=selected'
 
     lines.append(cur_line)
+
+    jitter_event = []
+    if isinstance(ana, AnalysisPNoise):
+        if ana.measurement:
+            for idx, event in enumerate(ana.measurement):
+                cur_line = f'pm{idx} jitterevent trigger=[{event.trig_p} {event.trig_n}] ' \
+                           f'triggerthresh={event.triggerthresh} triggernum={event.triggernum} ' \
+                           f'triggerdir={event.triggerdir} target=[{event.targ_p} {event.targ_n}]'
+                jitter_event.append(cur_line)
+    return jitter_event
 
 
 def _write_save_statements(lines: List[str], save_outputs: Set[str]):

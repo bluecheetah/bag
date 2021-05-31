@@ -357,10 +357,22 @@ class AnalysisPAC(AnalysisAC):
 
 @dataclass(eq=True, frozen=True)
 class AnalysisPNoise(AnalysisNoise):
+    measurement: Optional[ImmutableList[JitterEvent]] = None
 
     @property
     def name(self) -> str:
         return 'pnoise'
+
+
+@dataclass(eq=True, frozen=True)
+class JitterEvent:
+    trig_p: str
+    trig_n: str
+    triggerthresh: float
+    triggernum: int
+    triggerdir: str
+    targ_p: str
+    targ_n: str
 
 
 AnalysisInfo = Union[AnalysisDC, AnalysisAC, AnalysisSP, AnalysisNoise, AnalysisTran,
@@ -398,9 +410,12 @@ def analysis_from_dict(table: Dict[str, Any]) -> AnalysisInfo:
         return AnalysisPAC(base.param, base.sweep, base.options, base.save_outputs, base.freq)
     elif ana_type is AnalysisType.PNOISE:
         base = AnalysisAC.from_dict(table)
+        pnoise_meas = table.get('measurement', None)
+        if pnoise_meas:
+            pnoise_meas = ImmutableList([JitterEvent(**_dict) for _dict in pnoise_meas])
         return AnalysisPNoise(base.param, base.sweep, base.options, base.save_outputs, base.freq,
                               table.get('p_port', ''), table.get('n_port', ''),
-                              table.get('out_probe', ''), table.get('in_probe', ''))
+                              table.get('out_probe', ''), table.get('in_probe', ''), pnoise_meas)
     else:
         raise ValueError(f'Unknown analysis type: {ana_type}')
 
