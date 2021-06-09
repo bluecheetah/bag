@@ -169,7 +169,11 @@ class SpectreInterface(SimProcessManager):
                 jitter_event = _write_analysis(lines, sim_env, ana, precision, has_ic)
                 lines.append('')
                 for output in ana.save_outputs:
-                    save_outputs.update(get_cdba_name_bits(output, DesignOutput.SPECTRE))
+                    if ':' in output and '<' not in output:
+                        # TODO: hacky fix for saving current, won't work for buses.
+                        save_outputs.update([output])
+                    else:
+                        save_outputs.update(get_cdba_name_bits(output, DesignOutput.SPECTRE))
 
             # close sweep statements
             for _ in range(num_brackets):
