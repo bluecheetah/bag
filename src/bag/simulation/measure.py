@@ -206,7 +206,7 @@ class MeasurementManager(LoggingBase, abc.ABC):
                 tbm, tb_params = sim_object
                 sim_results = await sim_db.async_simulate_tbm_obj(cur_state, sim_dir / cur_state,
                                                                   cur_dut, tbm, tb_params,
-                                                                  tb_name=sim_id)
+                                                                  tb_name=sim_id, harnesses=harnesses)
 
             self.log(f'Processing output of {name}, state {cur_state}')
             done, next_info = self.process_output(cur_info, sim_results)
