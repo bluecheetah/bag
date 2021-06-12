@@ -351,7 +351,7 @@ class TestbenchManager(abc.ABC):
             self._sim = sim
 
     def setup(self, sch_db: ModuleDB, sch_params: Optional[Mapping[str, Any]],
-              dut_cv_info_list: List[Any], dut_netlist: Optional[Path], gen_sch: bool = True,
+              cv_info_list: List[Any], cv_netlist_list: List[Path], gen_sch: bool = True,
               work_dir: Optional[Path] = None, tb_name: str = '') -> None:
         self.update(work_dir, tb_name)
 
@@ -368,10 +368,11 @@ class TestbenchManager(abc.ABC):
 
             # create netlist for tb schematic
             self.log(f'Creating testbench {self._tb_name} netlist')
-            net_str = '' if dut_netlist is None else str(dut_netlist.resolve())
+            if cv_netlist_list:
+                cv_netlist_list = [str(netlist.resolve()) for netlist in cv_netlist_list]
             sch_db.batch_schematic([(sch_master, self._tb_name)], output=self._sim.netlist_type,
                                    top_subckt=False, fname=str(tb_netlist_path),
-                                   cv_info_list=dut_cv_info_list, cv_netlist=net_str)
+                                   cv_info_list=cv_info_list, cv_netlist_list=cv_netlist_list)
             self.log(f'Testbench {self._tb_name} netlisting done')
 
         netlist_info = self.get_netlist_info()

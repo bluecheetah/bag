@@ -140,8 +140,8 @@ class DesignMaster(abc.ABC):
             return my_module + '.' + cls.__name__
 
     @classmethod
-    def populate_params(cls, table: Dict[str, Any], params_info: Dict[str, str],
-                        default_params: Dict[str, Any]) -> Param:
+    def populate_params(cls, table: Mapping[str, Any], params_info: Mapping[str, str],
+                        default_params: Mapping[str, Any]) -> Param:
         """Fill params dictionary with values from table and default_params"""
         hidden_params = cls.get_hidden_params()
 
@@ -179,7 +179,7 @@ class DesignMaster(abc.ABC):
         return cls.get_qualified_name(), params
 
     @classmethod
-    def process_params(cls, params: Dict[str, Any]) -> Tuple[Param, Any]:
+    def process_params(cls, params: Mapping[str, Any]) -> Tuple[Param, Any]:
         """Process the given parameters dictionary.
 
         This method computes the final parameters dictionary from the user given one by
@@ -188,7 +188,7 @@ class DesignMaster(abc.ABC):
 
         Parameters
         ----------
-        params : Dict[str, Any]
+        params : Mapping[str, Any]
             the parameter dictionary specified by the user.
 
         Returns
@@ -490,15 +490,15 @@ class MasterDB(abc.ABC):
             precision = kwargs.get('precision', 6)
             cv_info_list = kwargs.get('cv_info_list', [])
             cv_info_out = kwargs.get('cv_info_out', None)
-            cv_netlist = kwargs.get('cv_netlist', '')
+            cv_netlist_list = kwargs.get('cv_netlist_list', [])
 
             prim_fname = get_netlist_setup_file()
-            if bool(cv_info_list) != bool(cv_netlist):
-                raise ValueError('cv_netlist and cv_info_list must be given together.')
+            if bool(cv_info_list) != bool(cv_netlist_list):
+                raise ValueError('cv_netlist_list and cv_info_list must be given together.')
 
             implement_netlist(fname, content_list, top_list, output, flat, shell, top_subckt,
                               square_bracket, rmin, precision, supply_wrap_mode, prim_fname,
-                              cv_info_list, cv_netlist, cv_info_out)
+                              cv_info_list, cv_netlist_list, cv_info_out)
         else:
             raise ValueError('Unknown design output type: {}'.format(output.name))
         end = time.time()

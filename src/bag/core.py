@@ -815,7 +815,7 @@ class BagProject:
                 fname = '' if use_netlist_path is None else str(use_netlist_path)
                 sch_db.batch_schematic(dut_list, output=netlist_type, top_subckt=False,
                                        fname=str(tb_netlist_path), cv_info_list=cv_info_list,
-                                       cv_netlist=fname)
+                                       cv_netlist_list=[fname])
                 if not raw:
                     sch_db.batch_schematic(dut_list, output=DesignOutput.SCHEMATIC)
                 sim_info = netlist_info_from_dict(sim_info_dict)
@@ -852,29 +852,48 @@ class BagProject:
         precision: int = specs.get('precision', 6)
         rcx_params: Optional[Mapping[str, Any]] = specs.get('rcx_params', None)
 
+        # DUT
         gen_specs_file: str = specs.get('gen_specs_file', '')
         if gen_specs_file:
             gen_specs: Mapping[str, Any] = read_yaml(gen_specs_file)
-            dut_str: Union[str, Type[TemplateBase]] = gen_specs.get('dut_class') or gen_specs['lay_class']
-            impl_lib: str = gen_specs['impl_lib']
-            impl_cell: str = gen_specs['impl_cell']
-            dut_params: Mapping[str, Any] = gen_specs['params']
-            root_dir: Union[str, Path] = gen_specs['root_dir']
-            meas_rel_dir: str = specs.get('meas_rel_dir', '')
+            params_key = 'params'
         else:
-            dut_str: Union[str, Type[TemplateBase]] = specs.get('dut_class') or specs['lay_class']
-            impl_lib: str = specs['impl_lib']
-            impl_cell: str = specs['impl_cell']
-            dut_params: Mapping[str, Any] = specs['dut_params']
-            root_dir: Union[str, Path] = specs['root_dir']
-            meas_rel_dir: str = specs.get('meas_rel_dir', '')
-
-        meas_cls = cast(Type[MeasurementManager], import_class(meas_str))
-        dut_cls = import_class(dut_str)
+            gen_specs = specs
+            params_key = 'dut_params'
+        specs_list = [dict(
+            impl_cell=gen_specs['impl_cell'],
+            dut_cls=gen_specs.get('dut_class') or gen_specs['lay_class'],
+            dut_params=gen_specs[params_key],
+            extract=extract,
+            export_lay=gen_cell & extract,
+        )]
+        impl_lib: str = gen_specs['impl_lib']
+        root_dir: Union[str, Path] = gen_specs['root_dir']
         if isinstance(root_dir, str):
             root_path = Path(root_dir)
         else:
             root_path = root_dir
+
+        # harnesses
+        harness_specs_list: Sequence[Mapping[str, Any]] = specs.get('harness_specs_list', [])
+        for _specs in harness_specs_list:
+            _gen_specs_file: str = _specs.get('gen_specs_file', '')
+            if _gen_specs_file:
+                _gen_specs: Mapping[str, Any] = read_yaml(_gen_specs_file)
+                _params_key = 'params'
+            else:
+                _gen_specs = _specs
+                _params_key = 'dut_params'
+            specs_list.append(dict(
+                impl_cell=_gen_specs['impl_cell'],
+                dut_cls=_gen_specs.get('dut_class') or _gen_specs['lay_class'],
+                dut_params=_gen_specs[params_key],
+                extract=extract,
+                export_lay=gen_cell & extract,
+            ))
+
+        meas_rel_dir: str = specs.get('meas_rel_dir', '')
+        meas_cls = cast(Type[MeasurementManager], import_class(meas_str))
         if meas_rel_dir:
             meas_path = root_path / meas_rel_dir
         else:
@@ -891,11 +910,16 @@ class BagProject:
                                                 dsn_options=dsn_options, force_sim=force_sim,
                                                 precision=precision, log_level=log_level)
 
-        dut = sim_db.new_design(impl_cell, dut_cls, dut_params, extract=extract, rcx_params=rcx_params,
-                                export_lay=gen_cell & extract)
+        coro = sim_db.async_batch_design(specs_list, rcx_params)
+        inst_list = batch_async_task([coro])[0]
         meas_params['fake'] = fake
         mm = sim_db.make_mm(meas_cls, meas_params)
-        result = sim_db.simulate_mm_obj(meas_name, meas_path / meas_name, dut, mm)
+        dut = inst_list[0]
+        if len(inst_list) > 1:
+            harnesses = inst_list[1:]
+        else:
+            harnesses = []
+        result = sim_db.simulate_mm_obj(meas_name, meas_path / meas_name, dut, mm, harnesses)
         pprint.pprint(result.data)
 
     def measure_cell_old(self, specs: Dict[str, Any],

@@ -67,6 +67,7 @@ class SimResults:
     dut: Optional[DesignInstance]
     tbm: TestbenchManager
     data: SimData
+    harnesses: Optional[Sequence[DesignInstance]] = None
 
 
 @dataclass(frozen=True)
@@ -74,6 +75,7 @@ class MeasureResult:
     dut: Optional[DesignInstance]
     mm: MeasurementManager
     data: Mapping[str, Any]
+    harnesses: Optional[Sequence[DesignInstance]] = None
 
 
 class DesignDB(LoggingBase):
@@ -387,9 +389,9 @@ class SimulationDB(LoggingBase):
             raise ans
         return ans
 
-    def simulate_mm_obj(self, sim_id: str, sim_dir: Path, dut: DesignInstance,
-                        mm: MeasurementManager) -> MeasureResult:
-        coro = self.async_simulate_mm_obj(sim_id, sim_dir, dut, mm)
+    def simulate_mm_obj(self, sim_id: str, sim_dir: Path, dut: DesignInstance, mm: MeasurementManager,
+                        harnesses: Optional[Sequence[DesignInstance]] = None) -> MeasureResult:
+        coro = self.async_simulate_mm_obj(sim_id, sim_dir, dut, mm, harnesses)
         results = batch_async_task([coro])
         if results is None:
             self.error('Measurement cancelled')
@@ -416,8 +418,8 @@ class SimulationDB(LoggingBase):
 
     async def async_simulate_tbm_obj(self, sim_id: str, sim_dir: Path,
                                      dut: Optional[DesignInstance], tbm: TestbenchManager,
-                                     tb_params: Optional[Mapping[str, Any]],
-                                     tb_name: str = '') -> SimResults:
+                                     tb_params: Optional[Mapping[str, Any]], tb_name: str = '',
+                                     harnesses: Optional[Sequence[DesignInstance]] = None) -> SimResults:
         if not tb_name:
             tb_name = sim_id
 
@@ -428,13 +430,21 @@ class SimulationDB(LoggingBase):
         # update tb_params
         if dut is None:
             cv_info_list = []
-            dut_netlist = None
+            cv_netlist_list = []
             dut_mtime = None
         else:
             cv_info_list = dut.cv_info_list
-            dut_netlist = dut.netlist_path
+            cv_netlist_list = [dut.netlist_path]
             dut_mtime = dut.netlist_path.stat().st_mtime
+            if harnesses:
+                for harness in harnesses:
+                    cv_info_list.extend(harness.cv_info_list)
+                    cv_netlist_list.append(harness.netlist_path)
+                    _mtime = harness.netlist_path.stat().st_mtime
+                    if _mtime > dut_mtime:
+                        dut_mtime = _mtime
             tb_params = _set_dut(tb_params, impl_lib, dut.cell_name)
+            tb_params = _set_harnesses(tb_params, harnesses)
         sim_netlist = tbm.sim_netlist_path
         sim_data_path = self._sim.get_sim_file(sim_dir, sim_id)
 
@@ -454,7 +464,7 @@ class SimulationDB(LoggingBase):
             prev_netlist.unlink()
 
         self.log(f'Configuring testbench manager {tbm.__class__.__name__}')
-        tbm.setup(sch_db, tb_params, cv_info_list, dut_netlist, gen_sch=self._dsn_db.gen_sch)
+        tbm.setup(sch_db, tb_params, cv_info_list, cv_netlist_list, gen_sch=self._dsn_db.gen_sch)
         if not sim_netlist.is_file():
             self.error(f'Cannot find simulation netlist: {sim_netlist}')
 
@@ -479,12 +489,16 @@ class SimulationDB(LoggingBase):
         else:
             self.log('Returning previous simulation data')
 
-        return SimResults(dut, tbm, load_sim_data_hdf5(sim_data_path))
+        return SimResults(dut, tbm, load_sim_data_hdf5(sim_data_path), harnesses)
 
     async def async_simulate_mm_obj(self, sim_id: str, sim_dir: Path, dut: Optional[DesignInstance],
-                                    mm: MeasurementManager) -> MeasureResult:
-        result = await mm.async_measure_performance(sim_id, sim_dir, self, dut)
-        return MeasureResult(dut, mm, result)
+                                    mm: MeasurementManager, harnesses: Optional[Sequence[DesignInstance]] = None
+                                    ) -> MeasureResult:
+        if harnesses:
+            result = await mm.async_measure_performance(sim_id, sim_dir, self, dut, harnesses)
+        else:  # for backwards compatibility
+            result = await mm.async_measure_performance(sim_id, sim_dir, self, dut)
+        return MeasureResult(dut, mm, result, harnesses)
 
 
 def _set_dut(tb_params: Optional[Mapping[str, Any]], dut_lib: str, dut_cell: str
@@ -505,3 +519,19 @@ def _set_dut(tb_params: Optional[Mapping[str, Any]], dut_lib: str, dut_cell: str
     else:
         ans['dut_params'] = _set_dut(dut_params, dut_lib, dut_cell)
     return ans
+
+
+def _set_harnesses(tb_params: Optional[Mapping[str, Any]], harnesses: Optional[Sequence[DesignInstance]] = None
+                   ) -> Optional[Mapping[str, Any]]:
+    """Returns a copy of the testbench parameters dictionary with harness instantiated.
+
+    This method does not support wrappers for harnesses yet. Also harnesses have to be statically instantiated.
+    """
+    if tb_params is None:
+        return tb_params
+
+    if harnesses:
+        ans = {k: v for k, v in tb_params.items()}
+        ans['harnesses_cell'] = [harness.cell_name for harness in harnesses]
+        return ans
+    return tb_params
