@@ -906,7 +906,7 @@ class Module(DesignMaster):
                 self.array_instance(inst_name, inst_term_list=inst_term_list)
 
     def design_resistor(self, inst_name: str, unit_params: Mapping[str, Any], nser: int = 1, npar: int = 1,
-                        plus: str = '', minus: str = '', mid: str = '') -> None:
+                        plus: str = '', minus: str = '', mid: str = '', bulk: str = '') -> None:
         """Design a BAG_prim resistor (with series / parallel support).
 
         This is a convenient method to design a resistor consisting of a series / parallel network of resistor units.
@@ -929,6 +929,8 @@ class Module(DesignMaster):
         mid : str
             base name of the intermediate nodes for series connection. The intermediate nodes will be named 'mid_X',
             where X is a non-negative integer.
+        bulk : str
+            the bulk terminal name.  Empty string to not rename.
         """
         inst = self.instances[inst_name]
         inst.design(**unit_params)
@@ -941,6 +943,8 @@ class Module(DesignMaster):
             plus = inst.get_connection('PLUS')
         if not minus:
             minus = inst.get_connection('MINUS')
+        if not bulk:
+            bulk = inst.get_connection('BULK')
 
         # series: array by adding more instances
         if nser > 1:
@@ -953,10 +957,19 @@ class Module(DesignMaster):
                 inst_names.append(_name)
                 _minus = minus if sidx == 0 else f'{mid}_{sidx - 1}'
                 _plus = plus if sidx == nser - 1 else f'{mid}_{sidx}'
-                inst_term_list.append((_name, [('PLUS', _plus), ('MINUS', _minus)]))
+                if inst.get_connection('BULK'):
+                    inst_term_list.append((_name, [('PLUS', _plus), ('MINUS', _minus), ('BULK', bulk)]))
+                else:
+                    inst_term_list.append((_name, [('PLUS', _plus), ('MINUS', _minus)]))
             self.array_instance(inst_name, inst_term_list=inst_term_list)
         else:
             inst_names = [inst_name]
+            term_net_iter = []
+            for name, rename in [('PLUS', plus), ('MINUS', minus), ('BULK', bulk)]:
+                if rename != inst.get_connection(name):
+                    term_net_iter.append((name, rename))
+            if term_net_iter:
+                self.reconnect_instance(inst_name, term_net_iter)
 
         # parallel: array by naming
         if npar > 1:
