@@ -1140,7 +1140,7 @@ class MosModuleBase(Module):
 
 
 class DiodeModuleBase(Module):
-    """The base design class for the bag primitive transistor.
+    """The base design class for the bag primitive diode.
     """
 
     def __init__(self, yaml_fname: str, database: ModuleDB, params: Param, **kwargs: Any) -> None:
@@ -1260,3 +1260,26 @@ class ResMetalModule(Module):
 
     def should_delete_instance(self) -> bool:
         return self.params['w'] == 0 or self.params['l'] == 0
+
+
+class ESDModuleBase(Module):
+    """The base design class for the bag primitive esd (static).
+    """
+
+    def __init__(self, yaml_fname: str, database: ModuleDB, params: Param, **kwargs: Any) -> None:
+        Module.__init__(self, yaml_fname, database, params, **kwargs)
+        self._pins = dict(PLUS=TermType.inout, MINUS=TermType.inout, GUARD_RING=TermType.inout)
+
+    @classmethod
+    def is_primitive(cls) -> bool:
+        return True
+
+    @classmethod
+    def get_params_info(cls) -> Mapping[str, str]:
+        return {}
+
+    def design(self) -> None:
+        pass
+
+    def get_schematic_parameters(self) -> Mapping[str, str]:
+        return {}

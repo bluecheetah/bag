@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Dict, Any, Tuple, Optional, Type, cast
+from typing import Mapping, Any, Tuple, Optional, Type, cast, Sequence
 
 from pybag.enum import Direction2D
 from pybag.core import BBox, Transform
@@ -33,7 +33,7 @@ class BlackBoxTemplate(TemplateBase):
         TemplateBase.__init__(self, temp_db, params, **kwargs)
 
     @classmethod
-    def get_params_info(cls) -> Dict[str, str]:
+    def get_params_info(cls) -> Mapping[str, str]:
         return dict(
             lib_name='The library name.',
             cell_name='The layout cell name.',
@@ -50,7 +50,7 @@ class BlackBoxTemplate(TemplateBase):
         cell_name: str = self.params['cell_name']
         top_layer: int = self.params['top_layer']
         size: Tuple[int, int] = self.params['size']
-        ports: Dict[str, Dict[str, Tuple[int, int, int, int]]] = self.params['ports']
+        ports: Mapping[str, Mapping[str, Sequence[Tuple[int, int, int, int]]]] = self.params['ports']
 
         show_pins = self.show_pins
         for term_name, pin_dict in ports.items():
@@ -65,7 +65,10 @@ class BlackBoxTemplate(TemplateBase):
         self.prim_bound_box = BBox(0, 0, size[0], size[1])
 
         for layer in range(1, top_layer + 1):
-            self.mark_bbox_used(layer, self.prim_bound_box)
+            try:
+                self.mark_bbox_used(layer, self.prim_bound_box)
+            except NotImplementedError:
+                pass
 
         self.sch_params = dict(
             lib_name=lib_name,
@@ -96,7 +99,7 @@ class IPMarginTemplate(TemplateBase):
         return self._core.get_schematic_class_inst()
 
     @classmethod
-    def get_params_info(cls) -> Dict[str, str]:
+    def get_params_info(cls) -> Mapping[str, str]:
         return dict(
             cls_name='wrapped class name.',
             params='parameters for the wrapped class.',

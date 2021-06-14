@@ -521,15 +521,15 @@ MM0 D G S B {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}
 .ENDS
 """
 
-dio_cdl_fmt = """.SUBCKT {{ cell_name }} MINUS PLUS
-*.PININFO MINUS:B PLUS:B
-XD0 {{ ports[0] }} {{ ports[1] }} {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+dio_cdl_fmt = """.SUBCKT {{ cell_name }}{% if ports|length == 3 %} GUARD_RING{% endif %} MINUS PLUS
+*.PININFO{% if ports|length == 3 %} GUARD_RING:B{% endif %} MINUS:B PLUS:B
+XD0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 .ENDS
 """
 
-dio_cdl_fmt_static = """.SUBCKT {{ cell_name }} MINUS PLUS
-*.PININFO MINUS:B PLUS:B
-XD0 {{ ports[0] }} {{ ports[1] }} {{ model_name }}
+dio_cdl_fmt_static = """.SUBCKT {{ cell_name }}{% if ports|length == 3 %} GUARD_RING{% endif %} MINUS PLUS
+*.PININFO{% if ports|length == 3 %} GUARD_RING:B{% endif %} MINUS:B PLUS:B
+XD0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}
 .ENDS
 """
 
@@ -551,15 +551,14 @@ MM0 D G S B {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}
 ends {{ cell_name }}
 """
 
-dio_spectre_fmt = """subckt {{ cell_name }} MINUS PLUS
+dio_spectre_fmt = """subckt {{ cell_name }}{% if ports|length == 3 %} GUARD_RING{% endif %} MINUS PLUS
 parameters l w
-XD0 {{ ports[0] }} {{ ports[1] }} {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+XD0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 ends {{ cell_name }}
 """
 
-dio_spectre_fmt_static = """subckt {{ cell_name }} MINUS PLUS
-parameters l w
-XD0 {{ ports[0] }} {{ ports[1] }} {{ model_name }}
+dio_spectre_fmt_static = """subckt {{ cell_name }}{% if ports|length == 3 %} GUARD_RING{% endif %} MINUS PLUS
+XD0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}
 ends {{ cell_name }}
 """
 
@@ -673,7 +672,8 @@ def populate_mos(config: Dict[str, Any], netlist_map: Dict[str, Any],
 
 def populate_diode(config: Dict[str, Any], netlist_map: Dict[str, Any],
                    inc_lines: Dict[DesignOutput, List[str]]) -> None:
-    template_key = 'diode_static' if config['static'] else 'diode'
+    static: bool = config['static']
+    template_key = 'diode_static' if static else 'diode'
 
     for cell_name, model_name in config['types']:
         # populate netlist_map
@@ -681,6 +681,10 @@ def populate_diode(config: Dict[str, Any], netlist_map: Dict[str, Any],
         cur_info['cell_name'] = cell_name
         netlist_map[cell_name] = cur_info
         ports = config['port_order'][cell_name]
+        if len(ports) == 3:
+            cur_info['io_terms'].insert(0, 'GUARD_RING')
+        if static:
+            cur_info['props'] = {}
 
         # write bag_prim netlist
         for v, lines in inc_lines.items():

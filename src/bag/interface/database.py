@@ -522,6 +522,9 @@ class DbAccess(InterfaceBase, abc.ABC):
                 elif cell_name.startswith('res_'):
                     # physical resistor template
                     module_name = 'ResPhysicalModuleBase'
+                elif cell_name.startswith('esd_'):
+                    # static esd template
+                    module_name = 'ESDModuleBase'
                 else:
                     raise Exception('Unknown primitive cell: %s' % cell_name)
 
