@@ -957,10 +957,10 @@ class Module(DesignMaster):
                 inst_names.append(_name)
                 _minus = minus if sidx == 0 else f'{mid}_{sidx - 1}'
                 _plus = plus if sidx == nser - 1 else f'{mid}_{sidx}'
+                term_list = [('PLUS', _plus), ('MINUS', _minus)]
                 if inst.get_connection('BULK'):
-                    inst_term_list.append((_name, [('PLUS', _plus), ('MINUS', _minus), ('BULK', bulk)]))
-                else:
-                    inst_term_list.append((_name, [('PLUS', _plus), ('MINUS', _minus)]))
+                    term_list.append(('BULK', bulk))
+                inst_term_list.append((_name, term_list))
             self.array_instance(inst_name, inst_term_list=inst_term_list)
         else:
             inst_names = [inst_name]
