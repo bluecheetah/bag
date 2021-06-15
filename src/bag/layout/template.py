@@ -2582,7 +2582,7 @@ class TemplateBase(DesignMaster):
     def mark_bbox_used(self, layer_id: int, bbox: BBox) -> None:
         """Marks the given bounding-box region as used in this Template."""
         # TODO: Fix this
-        raise NotImplementedError('Not implemented yet')
+        raise ValueError('Not implemented yet')
 
     def do_max_space_fill(self, layer_id: int, bound_box: Optional[BBox] = None,
                           fill_boundary: bool = True) -> None:

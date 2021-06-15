@@ -67,7 +67,7 @@ class BlackBoxTemplate(TemplateBase):
         for layer in range(1, top_layer + 1):
             try:
                 self.mark_bbox_used(layer, self.prim_bound_box)
-            except NotImplementedError:
+            except ValueError:
                 pass
 
         self.sch_params = dict(
