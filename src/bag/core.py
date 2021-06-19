@@ -887,7 +887,7 @@ class BagProject:
             specs_list.append(dict(
                 impl_cell=_gen_specs['impl_cell'],
                 dut_cls=_gen_specs.get('dut_class') or _gen_specs['lay_class'],
-                dut_params=_gen_specs[params_key],
+                dut_params=_gen_specs[_params_key],
                 extract=extract,
                 export_lay=gen_cell & extract,
             ))
