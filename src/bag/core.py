@@ -799,7 +799,7 @@ class BagProject:
 
                 tbm = tbm_cls(self._sim, root_path, 'tb_sim', impl_lib,
                               tbm_specs, [], sim_envs, precision=precision)
-                tbm.setup(sch_db, tb_params, cv_info_list, use_netlist_path, gen_sch=not raw)
+                tbm.setup(sch_db, tb_params, cv_info_list, [use_netlist_path], gen_sch=not raw)
             else:
                 # setup testbench using spec file
                 tb_lib: str = specs['tb_lib']
