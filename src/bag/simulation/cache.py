@@ -27,7 +27,7 @@ from pathlib import Path
 from dataclasses import dataclass
 
 from pybag.enum import DesignOutput, LogLevel
-from pybag.core import FileLogger, gds_equal
+from pybag.core import FileLogger, gds_equal, PySchCellViewInfo
 
 from ..env import get_gds_layer_map, get_gds_object_map
 from ..io.file import read_yaml, write_yaml
@@ -38,7 +38,7 @@ from ..concurrent.util import GatherHelper
 from ..concurrent.core import batch_async_task
 from ..interface.database import DbAccess
 from ..design.database import ModuleDB
-from ..design.module import Module, PySchCellView
+from ..design.module import Module
 from ..layout.template import TemplateDB, TemplateBase
 from .data import SimData
 from .hdf5 import load_sim_data_hdf5
@@ -51,11 +51,13 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class DesignInstance:
+    lib_name: str
     cell_name: str
-    sch_master: Module
+    sch_master: Optional[Module]
     lay_master: Optional[TemplateBase]
     netlist_path: Path
-    cv_info_list: List[PySchCellView]
+    cv_info_list: List[PySchCellViewInfo]
+    pin_names: Sequence[str]
 
     @property
     def cache_name(self) -> str:
@@ -136,12 +138,26 @@ class DesignDB(LoggingBase):
         extract_set = set()
         gatherer = GatherHelper()
         for dut_info in dut_specs:
-            dut, ext_path = await self._create_dut(**dut_info)
+            static_info: str = dut_info.get('static_info', '')
+            if static_info:
+                _info = read_yaml(static_info)
+                cell_name: str = _info['cell_name']
+                ext_path = self._root_dir / cell_name
+                ext_path.mkdir(parents=True, exist_ok=True)
+                dut_pins = _info['in_terms'] + _info['out_terms'] + _info['io_terms']
+                dut = DesignInstance(_info['lib_name'], cell_name, None, None, ext_path / 'rcx.sp',
+                                     [PySchCellViewInfo(static_info)], dut_pins)
+            else:
+                dut, ext_path = await self._create_dut(**dut_info)
             ans.append(dut)
             if ext_path is not None and ext_path not in extract_set:
                 extract_set.add(ext_path)
-                impl_cell: str = dut_info['impl_cell']
-                gatherer.append(self._extract_netlist(ext_path, impl_cell, rcx_params=rcx_params))
+                if static_info:
+                    gatherer.append(self._extract_netlist(ext_path, dut.cell_name, rcx_params=rcx_params,
+                                                          static=True, impl_lib=dut.lib_name))
+                else:
+                    impl_cell: str = dut_info['impl_cell']
+                    gatherer.append(self._extract_netlist(ext_path, impl_cell, rcx_params=rcx_params))
 
         if gatherer:
             await gatherer.gather_err()
@@ -269,16 +285,19 @@ class DesignDB(LoggingBase):
                                              name_prefix=name_prefix, name_suffix=name_suffix,
                                              exact_cell_names=exact_cell_names, flat=flat)
 
-        return DesignInstance(impl_cell, sch_master, lay_master, ans, cv_info_out), extract_info
+        return DesignInstance(self._sch_db.lib_name, impl_cell, sch_master, lay_master, ans, cv_info_out,
+                              list(sch_master.pins.keys())), extract_info
 
-    async def _extract_netlist(self, dsn_dir: Path, impl_cell: str, rcx_params: Mapping[str, Any]) -> None:
-        impl_lib = self.impl_lib
+    async def _extract_netlist(self, dsn_dir: Path, impl_cell: str, rcx_params: Mapping[str, Any],
+                               static: bool = False, impl_lib: str = '') -> None:
+        if not impl_lib:
+            impl_lib = self.impl_lib
 
         self.log('running LVS...')
         ext_dir = dsn_dir / 'rcx'
         lvs_passed, lvs_log = await self._db.async_run_lvs(impl_lib, impl_cell, run_rcx=True,
-                                                           layout=str(dsn_dir / 'layout.gds'),
-                                                           netlist=str(dsn_dir / 'netlist.cdl'),
+                                                           layout='' if static else str(dsn_dir / 'layout.gds'),
+                                                           netlist='' if static else str(dsn_dir / 'netlist.cdl'),
                                                            run_dir=ext_dir)
         if lvs_passed:
             self.log('LVS passed!')
@@ -287,10 +306,9 @@ class DesignDB(LoggingBase):
 
         self.log('running RCX...')
         final_netlist, rcx_log = await self._db.async_run_rcx(impl_lib, impl_cell,
-                                                              layout=str(dsn_dir / 'layout.gds'),
-                                                              netlist=str(dsn_dir / 'netlist.cdl'),
-                                                              run_dir=ext_dir,
-                                                              params=rcx_params)
+                                                              layout='' if static else str(dsn_dir / 'layout.gds'),
+                                                              netlist='' if static else str(dsn_dir / 'netlist.cdl'),
+                                                              run_dir=ext_dir, params=rcx_params)
         if final_netlist:
             self.log('RCX passed!')
             if isinstance(final_netlist, list):
@@ -424,7 +442,6 @@ class SimulationDB(LoggingBase):
             tb_name = sim_id
 
         sch_db = self._dsn_db.sch_db
-        impl_lib = sch_db.lib_name
         tbm.update(work_dir=sim_dir, tb_name=tb_name, sim=self._sim)
 
         # update tb_params
@@ -443,7 +460,7 @@ class SimulationDB(LoggingBase):
                     _mtime = harness.netlist_path.stat().st_mtime
                     if _mtime > dut_mtime:
                         dut_mtime = _mtime
-            tb_params = _set_dut(tb_params, impl_lib, dut.cell_name)
+            tb_params = _set_dut(tb_params, dut.lib_name, dut.cell_name)
             tb_params = _set_harnesses(tb_params, harnesses)
         sim_netlist = tbm.sim_netlist_path
         sim_data_path = self._sim.get_sim_file(sim_dir, sim_id)
@@ -532,6 +549,6 @@ def _set_harnesses(tb_params: Optional[Mapping[str, Any]], harnesses: Optional[S
 
     if harnesses:
         ans = {k: v for k, v in tb_params.items()}
-        ans['harnesses_cell'] = [harness.cell_name for harness in harnesses]
+        ans['harnesses_cell'] = [(harness.lib_name, harness.cell_name) for harness in harnesses]
         return ans
     return tb_params

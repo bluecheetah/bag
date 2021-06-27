@@ -860,13 +860,21 @@ class BagProject:
         else:
             gen_specs = specs
             params_key = 'dut_params'
-        specs_list = [dict(
-            impl_cell=gen_specs['impl_cell'],
-            dut_cls=gen_specs.get('dut_class') or gen_specs['lay_class'],
-            dut_params=gen_specs[params_key],
-            extract=extract,
-            export_lay=gen_cell & extract,
-        )]
+        static_info: str = specs.get('static_info', '')
+        if static_info:
+            if not extract:
+                raise ValueError('Currently we only support extracted views of static cells, so please use "-x".')
+            specs_list = [dict(
+                static_info=static_info,
+            )]
+        else:
+            specs_list = [dict(
+                impl_cell=gen_specs['impl_cell'],
+                dut_cls=gen_specs.get('dut_class') or gen_specs['lay_class'],
+                dut_params=gen_specs[params_key],
+                extract=extract,
+                export_lay=gen_cell & extract,
+            )]
         impl_lib: str = gen_specs['impl_lib']
         root_dir: Union[str, Path] = gen_specs['root_dir']
         if isinstance(root_dir, str):
@@ -884,13 +892,21 @@ class BagProject:
             else:
                 _gen_specs = _specs
                 _params_key = 'dut_params'
-            specs_list.append(dict(
-                impl_cell=_gen_specs['impl_cell'],
-                dut_cls=_gen_specs.get('dut_class') or _gen_specs['lay_class'],
-                dut_params=_gen_specs[_params_key],
-                extract=extract,
-                export_lay=gen_cell & extract,
-            ))
+            _static_info: str = _specs.get('static_info', '')
+            if _static_info:
+                if not extract:
+                    raise ValueError('Currently we only support extracted views of static cells, so please use "-x".')
+                specs_list.append(dict(
+                    static_info=_static_info,
+                ))
+            else:
+                specs_list.append(dict(
+                    impl_cell=_gen_specs['impl_cell'],
+                    dut_cls=_gen_specs.get('dut_class') or _gen_specs['lay_class'],
+                    dut_params=_gen_specs[_params_key],
+                    extract=extract,
+                    export_lay=gen_cell & extract,
+                ))
 
         meas_rel_dir: str = specs.get('meas_rel_dir', '')
         meas_cls = cast(Type[MeasurementManager], import_class(meas_str))
