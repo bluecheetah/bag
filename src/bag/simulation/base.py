@@ -201,7 +201,7 @@ class EmSimAccess(abc.ABC):
 
     @property
     def config(self) -> Mapping[str, Any]:
-        """Dict[str, Any]: simulation configurations."""
+        """Mapping[str, Any]: simulation configurations."""
         return self._config
 
     @abc.abstractmethod

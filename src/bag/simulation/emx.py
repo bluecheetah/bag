@@ -77,6 +77,8 @@ class EMXInterface(EmSimProcessManager):
         if not self._proc_file.exists():
             raise Exception(f'Cannot find process file: {self._proc_file}')
         self._key: str = sim_config.get('key', '')
+        self._parallel: int = sim_config.get('parallel', 1)
+        self._simul_freq: int = sim_config.get('simul_freq', 1)
 
     def _set_em_option(self) -> Tuple[List[str], List[Path]]:
         em_options: Mapping[str, Any] = self._params['em_options']
@@ -136,8 +138,8 @@ class EMXInterface(EmSimProcessManager):
         log_opts = [f'--log-file={log_file}']
 
         # other options
-        other_opts = ['--parallel=4', '--max-memory=80%', '--simultaneous-frequencies=0', '--quasistatic',
-                      '--dump-connectivity']
+        other_opts = [f'--parallel={self._parallel}', f'--simultaneous-frequencies={self._simul_freq}',
+                      '--max-memory=80%', '--quasistatic', '--dump-connectivity']
 
         # get extra options
         extra_opts = []
@@ -227,8 +229,9 @@ class EMXInterface(EmSimProcessManager):
     def run_simulation(self) -> None:
         coro = self.async_gen_nport()
         batch_async_task([coro])
-        coro = self.async_gen_model()
-        batch_async_task([coro])
+        if 'model_type' in self._params:
+            coro = self.async_gen_model()
+            batch_async_task([coro])
 
     def process_output(self) -> None:
         # calculate inductance and quality factor

@@ -1024,6 +1024,7 @@ class BagProject:
         impl_cell: str = specs['impl_cell']
         root_dir: Union[str, Path] = specs['root_dir']
         params: Mapping[str, Any] = specs['params']
+        process_output: bool = specs.get('process_output', False)
 
         if isinstance(root_dir, str):
             root_path = Path(root_dir)
@@ -1045,7 +1046,8 @@ class BagProject:
                 em_obj.run_simulation()
             else:
                 print('Skipping EM simulation and using old results. Use "--force_sim" to force EM simulation.')
-            em_obj.process_output()
+            if process_output:
+                em_obj.process_output()
         else:
             raise NotImplementedError('EM simulation is not set up in bag_config.yaml.')
 
