@@ -729,7 +729,15 @@ class Module(DesignMaster):
                         raise ValueError(f'type not supported for key={key}, val={val} '
                                          f'with type {type(val)}')
 
-            tmp_name = template_names[lib].get(cell_type, 'X{}').format(i)
+            _name: Optional[str] = params_dict.get('name')
+            tmp = template_names[lib].get(cell_type, 'X{}')
+            if _name:
+                if _name.startswith(tmp[:-2]):
+                    tmp_name = _name
+                else:
+                    raise ValueError(f'name={_name} must start with prefix={tmp[:-2]}')
+            else:
+                tmp_name = tmp.format(i)
             element_list.append((tmp_name, lib, cell_type, value_dict, conn_dict))
             name_list.append(tmp_name)
 

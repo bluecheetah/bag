@@ -407,7 +407,7 @@ class SimulationDB(LoggingBase):
             raise ans
         return ans
 
-    def simulate_mm_obj(self, sim_id: str, sim_dir: Path, dut: DesignInstance, mm: MeasurementManager,
+    def simulate_mm_obj(self, sim_id: str, sim_dir: Path, dut: Optional[DesignInstance], mm: MeasurementManager,
                         harnesses: Optional[Sequence[DesignInstance]] = None) -> MeasureResult:
         coro = self.async_simulate_mm_obj(sim_id, sim_dir, dut, mm, harnesses)
         results = batch_async_task([coro])
@@ -453,14 +453,14 @@ class SimulationDB(LoggingBase):
             cv_info_list = dut.cv_info_list
             cv_netlist_list = [dut.netlist_path]
             dut_mtime = dut.netlist_path.stat().st_mtime
-            if harnesses:
-                for harness in harnesses:
-                    cv_info_list.extend(harness.cv_info_list)
-                    cv_netlist_list.append(harness.netlist_path)
-                    _mtime = harness.netlist_path.stat().st_mtime
-                    if _mtime > dut_mtime:
-                        dut_mtime = _mtime
             tb_params = _set_dut(tb_params, dut.lib_name, dut.cell_name)
+        if harnesses:
+            for harness in harnesses:
+                cv_info_list.extend(harness.cv_info_list)
+                cv_netlist_list.append(harness.netlist_path)
+                _mtime = harness.netlist_path.stat().st_mtime
+                if _mtime > dut_mtime:
+                    dut_mtime = _mtime
             tb_params = _set_harnesses(tb_params, harnesses)
         sim_netlist = tbm.sim_netlist_path
         sim_data_path = self._sim.get_sim_file(sim_dir, sim_id)

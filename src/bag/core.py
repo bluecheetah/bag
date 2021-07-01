@@ -853,6 +853,7 @@ class BagProject:
         rcx_params: Optional[Mapping[str, Any]] = specs.get('rcx_params', None)
 
         # DUT
+        no_dut = False
         gen_specs_file: str = specs.get('gen_specs_file', '')
         if gen_specs_file:
             gen_specs: Mapping[str, Any] = read_yaml(gen_specs_file)
@@ -868,13 +869,17 @@ class BagProject:
                 static_info=static_info,
             )]
         else:
-            specs_list = [dict(
-                impl_cell=gen_specs['impl_cell'],
-                dut_cls=gen_specs.get('dut_class') or gen_specs['lay_class'],
-                dut_params=gen_specs[params_key],
-                extract=extract,
-                export_lay=gen_cell & extract,
-            )]
+            if 'dut_class' not in gen_specs and 'lay_class' not in gen_specs:
+                no_dut = True
+                specs_list = []
+            else:
+                specs_list = [dict(
+                    impl_cell=gen_specs['impl_cell'],
+                    dut_cls=gen_specs.get('dut_class') or gen_specs['lay_class'],
+                    dut_params=gen_specs[params_key],
+                    extract=extract,
+                    export_lay=gen_cell & extract,
+                )]
         impl_lib: str = gen_specs['impl_lib']
         root_dir: Union[str, Path] = gen_specs['root_dir']
         if isinstance(root_dir, str):
@@ -926,15 +931,22 @@ class BagProject:
                                                 dsn_options=dsn_options, force_sim=force_sim,
                                                 precision=precision, log_level=log_level)
 
-        coro = sim_db.async_batch_design(specs_list, rcx_params)
-        inst_list = batch_async_task([coro])[0]
+        if specs_list:
+            coro = sim_db.async_batch_design(specs_list, rcx_params)
+            inst_list = batch_async_task([coro])[0]
+        else:
+            inst_list = []
         meas_params['fake'] = fake
         mm = sim_db.make_mm(meas_cls, meas_params)
-        dut = inst_list[0]
-        if len(inst_list) > 1:
-            harnesses = inst_list[1:]
+        if no_dut:
+            dut = None
+            harnesses = inst_list
         else:
-            harnesses = []
+            dut = inst_list[0]
+            if len(inst_list) > 1:
+                harnesses = inst_list[1:]
+            else:
+                harnesses = []
         result = sim_db.simulate_mm_obj(meas_name, meas_path / meas_name, dut, mm, harnesses)
         pprint.pprint(result.data)
 
@@ -1024,7 +1036,7 @@ class BagProject:
         impl_cell: str = specs['impl_cell']
         root_dir: Union[str, Path] = specs['root_dir']
         params: Mapping[str, Any] = specs['params']
-        process_output: bool = specs.get('process_output', False)
+        process_output: bool = specs.get('process_output', True)
 
         if isinstance(root_dir, str):
             root_path = Path(root_dir)
