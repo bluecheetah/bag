@@ -63,6 +63,7 @@ class RCXMode(Enum):
     xrc = 0
     xact = 1
     qrc = 2
+    starrc = 3
 
 
 class Calibre(VirtuosoChecker):
@@ -153,12 +154,12 @@ class Calibre(VirtuosoChecker):
         def _rcx_passed_check(retcode: int, log_file: str) -> Tuple[str, str]:
             fpath = Path(log_file).resolve()
             out_file: Path = fpath.parent
-            if self._rcx_mode is RCXMode.qrc:
+            if self._rcx_mode is RCXMode.qrc or self._rcx_mode is RCXMode.starrc:
                 out_file = out_file.joinpath(f'{cell_name}.spf')
                 if not out_file.is_file():
                     return '', log_file
                 out_file_str = str(out_file)
-            else:
+            elif self._rcx_mode is RCXMode.xrc or self._rcx_mode is RCXMode.xact:
                 out_file = out_file.joinpath(f'{cell_name}.pex.netlist')
                 if not out_file.is_file():
                     return '', log_file
@@ -168,11 +169,16 @@ class Calibre(VirtuosoChecker):
                                 parent_dir.joinpath(f'{cell_name}.pex.netlist.pex'),
                                 parent_dir.joinpath(f'{cell_name}.pex.netlist.{cell_name}.pxi'),
                                 ]
+            else:
+                raise ValueError(f'Unknown rcx_program = {self._rcx_mode.name}')
 
             return out_file_str, log_file
 
-        if self._rcx_mode is RCXMode.qrc:
-            cmd = ['qrc', '-64', '-cmd', None]
+        if self._rcx_mode is RCXMode.qrc or self._rcx_mode is RCXMode.starrc:
+            if self._rcx_mode is RCXMode.qrc:
+                cmd = ['qrc', '-64', '-cmd', None]
+            else:
+                cmd = ['StarXtract', None]
             flow_list = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
                                                 sch_view, params, 'rcx', cmd, _rcx_passed_check, run_dir)
             _, log_fname, env, dir_name, _ = flow_list[-1]
@@ -181,10 +187,11 @@ class Calibre(VirtuosoChecker):
             flow_list.insert(len(flow_list) - 2,
                              (cmd, str(query_log), env, dir_name, all_pass_callback))
             return flow_list
-        else:
+        elif self._rcx_mode is RCXMode.xrc or self._rcx_mode is RCXMode.xact:
             cmd = ['calibre', '-lvs', '-hier', '-spice', run_dir.resolve() + f'svdb/{cell_name}.sp', '-nowait', None]
             flow_list = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
-                                                sch_view, params, 'rcx', cmd, all_pass_callback, run_dir, str_suffix='_lvs')
+                                                sch_view, params, 'rcx', cmd, all_pass_callback, run_dir,
+                                                str_suffix='_lvs')
             extract_type = params.get('extract_type', self.get_config('rcx')['params'].get('extract_type', 'rc'))
             cmd = ['calibre', '-xrc', '-pdb', f'-{extract_type}', '-turbo 1', '-nowait', None]
             flow2 = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
@@ -197,6 +204,8 @@ class Calibre(VirtuosoChecker):
             flow_list.insert(len(flow_list), flow3[-1])
 
             return flow_list
+        else:
+            raise ValueError(f'Unknown rcx_program = {self._rcx_mode.name}')
 
     def _setup_flow_helper(self, lib_name: str, cell_name: str, layout: Optional[str],
                            netlist: Optional[str], lay_view: str, sch_view: str,
