@@ -51,6 +51,7 @@ from typing import (
     Sequence, Set, cast
 )
 from bag.typing import PointType
+from bag.util.search import BinaryIterator
 
 import abc
 from itertools import product
@@ -2704,6 +2705,160 @@ class TemplateBase(DesignMaster):
         options['cover_layers'] = [lay for lay_id in sorted(cover_layers)
                                    for lay, _ in tech_info.get_lay_purp_list(lay_id)]
         options['cell_type'] = config.get('cell_type', 'block')
+
+    def find_track_width(self, layer_id: int, width: int) -> int:
+        """Find the track width corresponding to the physical width
+
+        Parameters
+        ----------
+        layer_id: int
+            The metal layer ID
+        width: int
+            Physical width of the wire, in resolution units
+
+        Returns
+        -------
+        tr_width: int
+        """
+        bin_iter = BinaryIterator(low=1)
+        while bin_iter.has_next():
+            cur = bin_iter.get_next()
+            cur_width = self.grid.get_wire_total_width(layer_id, cur)
+            if cur_width == width:
+                return cur
+            if cur_width < width:
+                bin_iter.up()
+            else:  # cur_width > width
+                bin_iter.down()
+        raise ValueError(f'Cannot find track width for width={width} on layer={layer_id}.')
+
+    def connect_via_stack(self, tr_manager: TrackManager, warr: WireArray, top_layer: int, w_type: str = 'sig',
+                          alignment_p: int = 0, alignment_o: int = 0,
+                          mlm_dict: Optional[Mapping[int, MinLenMode]] = None,
+                          ret_warr_dict: Optional[Mapping[int, WireArray]] = None,
+                          coord_list_p_override: Optional[Sequence[int]] = None,
+                          coord_list_o_override: Optional[Sequence[int]] = None) -> WireArray:
+        """Helper method to draw via stack and connections upto top layer, assuming connections can be on grid.
+        Should work regardless of direction of top layer and bot layer.
+
+        This method supports equally spaced WireArrays only. Needs modification for non uniformly spaced WireArrays.
+
+        Parameters
+        ----------
+        tr_manager: TrackManager
+            the track manager for this layout generator
+        warr: WireArray
+            The bot_layer wire array that has to via up
+        top_layer: int
+            The top_layer upto which stacked via has to go
+        w_type: str
+            The wire type, for querying widths from track manager
+        alignment_p: int
+            alignment for wire arrays which are parallel to bot_layer warr
+            If alignment == -1, will "left adjust" the wires (left is the lower index direction).
+            If alignment == 0, will center the wires in the middle.
+            If alignment == 1, will "right adjust" the wires.
+        alignment_o: int
+            alignment for wire arrays which are orthogonal to bot_layer warr
+        mlm_dict: Optional[Mapping[int, MinLenMode]]
+            Dictionary of MinLenMode for every metal layer. Uses MinLenMode.MIDDLE by default
+        ret_warr_dict: Optional[Mapping[int, WireArray]]
+            If provided, this dictionary will contain all the WireArrays created during via stacking
+        coord_list_p_override: Optional[Sequence[int]]
+            List of co-ordinates for WireArrays parallel to bot_layer wire, assumed to be equally spaced
+        coord_list_o_override: Optional[Sequence[int]]
+            List of co-ordinates for WireArrays orthogonal to bot_layer wire, assumed to be equally spaced
+
+        Returns
+        -------
+        top_warr: WireArray
+            The top_layer warr after via stacking all the way up
+        """
+        if ret_warr_dict is None:
+            ret_warr_dict = {}
+        if mlm_dict is None:
+            mlm_dict = {}
+        bot_layer = warr.layer_id
+        assert bot_layer + 2 <= top_layer, f'top_layer={top_layer} must be at least 2 higher than ' \
+                                           f'bot_layer={bot_layer}  to have via stack'
+
+        # Make sure widths are enough so that we can via up to top_layer
+        top_layer_w = tr_manager.get_width(top_layer, w_type)
+        w_dict = {top_layer: top_layer_w}
+        for _layer in range(top_layer - 1, bot_layer - 1, -1):
+            top_layer_w = w_dict[_layer] = self.grid.get_min_track_width(_layer, top_ntr=top_layer_w)
+        assert warr.track_id.width >= w_dict[bot_layer], f'It is not possible to via up from given WireArray to the ' \
+                                                         f'top_layer={top_layer} with width={top_layer_w} specified ' \
+                                                         f'by the TrackManager.'
+
+        # Find number of tracks to be used for layers with direction orthogonal to bot_layer, based on topmost
+        # layer in that direction, called as top_layer_o ("_o" means orthogonal to bot_layer)
+        bot_dir = self.grid.get_direction(bot_layer)
+        top_dir = self.grid.get_direction(top_layer)
+        top_layer_o = top_layer - 1 if bot_dir == top_dir else top_layer
+
+        if coord_list_o_override is None:
+            tidx_l = self.grid.coord_to_track(top_layer_o, warr.lower, RoundMode.GREATER_EQ)
+            tidx_r = self.grid.coord_to_track(top_layer_o, warr.upper, RoundMode.LESS_EQ)
+            # Divide by 2 for via separation
+            num_wires_o = tr_manager.get_num_wires_between(top_layer_o, w_type, tidx_l, w_type, tidx_r, w_type) + 2
+            num_wires_o = max(-(- num_wires_o // 2), 1)
+            tidx_list_o = tr_manager.spread_wires(top_layer_o, [w_type] * num_wires_o, tidx_l, tidx_r, (w_type, w_type),
+                                                  alignment=alignment_o)
+            # need to compute coord_list for conversion to tidx in layers which are same direction as top_layer_o
+            coord_list_o = [self.grid.track_to_coord(top_layer_o, tidx) for tidx in tidx_list_o]
+        else:
+            num_wires_o = len(coord_list_o_override)
+            coord_list_o = coord_list_o_override
+
+        if coord_list_p_override is None:
+            # Find coord_list_p for co-ordinates of tracks of layers that are parallel to bot_layer
+            coord_list_p = [self.grid.track_to_coord(bot_layer, tidx) for tidx in warr.track_id]
+        else:
+            coord_list_p = coord_list_p_override
+
+        for _layer in range(bot_layer + 1, top_layer + 1):
+            _dir = self.grid.get_direction(_layer)
+            _w = tr_manager.get_width(_layer, w_type)
+            assert _w >= w_dict[_layer], f'It is not possible to via up because of width={_w} of layer={_layer} ' \
+                                         f'specified by TrackManager.'
+            _mlm = mlm_dict.get(_layer, MinLenMode.MIDDLE)
+            if _dir == bot_dir:
+                if coord_list_p_override is None:
+                    tidx_l = self.grid.coord_to_track(_layer, coord_list_p[0], RoundMode.NEAREST)
+                    tidx_r = self.grid.coord_to_track(_layer, coord_list_p[-1], RoundMode.NEAREST)
+                    # Divide by 2 for via separation
+                    num_wires_p = tr_manager.get_num_wires_between(_layer, w_type, tidx_l, w_type, tidx_r, w_type) + 2
+                    num_wires_p = max(-(- num_wires_p // 2), 1)
+                    num_avail = len(coord_list_p)
+                    if num_wires_p < num_avail:
+                        # adjust num_wires_p to ensure that vias are formed in a stack
+                        num_wires_p = min(num_wires_p, (num_avail + 1) // 2)
+                        if num_avail % 2 == 0:
+                            if alignment_p > 0:
+                                tidx_l = self.grid.coord_to_track(_layer, coord_list_p[1], RoundMode.NEAREST)
+                            else:
+                                tidx_r = self.grid.coord_to_track(_layer, coord_list_p[-2], RoundMode.NEAREST)
+                    else:  # num_wires_p >= num_avail:
+                        # use entire coord_list_p
+                        num_wires_p = num_avail
+                    _tidx_list = tr_manager.spread_wires(_layer, [w_type] * num_wires_p, tidx_l, tidx_r,
+                                                         (w_type, w_type),
+                                                         alignment=0)
+                    _num = num_wires_p
+                else:
+                    _num = len(coord_list_p)
+                    _tidx_list = [self.grid.coord_to_track(_layer, coord, RoundMode.NEAREST) for coord in coord_list_p]
+            else:
+                _tidx_list = [self.grid.coord_to_track(_layer, coord, RoundMode.NEAREST) for coord in coord_list_o]
+                _num = num_wires_o
+            sep = _tidx_list[1] - _tidx_list[0] if _num > 1 else 0
+            # TODO: support non-uniformly spaced list of WireArrays
+            warr = self.connect_to_tracks(warr, TrackID(_layer, _tidx_list[0], _w, num=_num, pitch=sep),
+                                          min_len_mode=_mlm)
+            ret_warr_dict[_layer] = warr
+
+        return warr
 
 
 def _update_device_fill_area(lookup: RTree, ed: Param, inst_box: BBox, inst_edges: TemplateEdgeInfo,
