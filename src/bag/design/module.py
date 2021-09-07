@@ -647,6 +647,7 @@ class Module(DesignMaster):
                 'cccs': 'CCCS{}',
                 'ccvs': 'CCVS{}',
                 'idc': 'IDC{}',
+                'ideal_balun': 'BAL{}',
                 'ind': 'L{}',
                 'ipulse': 'IPULSE{}',
                 'ipwlf': 'IPWLF{}',
@@ -663,7 +664,6 @@ class Module(DesignMaster):
                 'vpulse': 'VPULSE{}',
                 'vpwlf': 'VPWLF{}',
                 'vsin': 'VSIN{}',
-                'ideal_balun': 'BAL{}',
             }
         }
         type_to_value_dict = {
@@ -672,6 +672,7 @@ class Module(DesignMaster):
                 'cccs': 'fgain',
                 'ccvs': 'hgain',
                 'idc': 'idc',
+                'ideal_balun': None,
                 'ind': 'l',
                 'ipulse': None,
                 'ipwlf': 'fileName',
@@ -688,7 +689,6 @@ class Module(DesignMaster):
                 'vpulse': None,
                 'vpwlf': 'fileName',
                 'vsin': 'acm',
-                'ideal_balun': None,
             },
         }
 
