@@ -647,6 +647,7 @@ class Module(DesignMaster):
                 'cccs': 'CCCS{}',
                 'ccvs': 'CCVS{}',
                 'idc': 'IDC{}',
+                'ideal_balun': 'BAL{}',
                 'ind': 'L{}',
                 'ipulse': 'IPULSE{}',
                 'ipwlf': 'IPWLF{}',
@@ -671,6 +672,7 @@ class Module(DesignMaster):
                 'cccs': 'fgain',
                 'ccvs': 'hgain',
                 'idc': 'idc',
+                'ideal_balun': None,
                 'ind': 'l',
                 'ipulse': None,
                 'ipwlf': 'fileName',
@@ -914,7 +916,8 @@ class Module(DesignMaster):
                 self.array_instance(inst_name, inst_term_list=inst_term_list)
 
     def design_resistor(self, inst_name: str, unit_params: Mapping[str, Any], nser: int = 1, npar: int = 1,
-                        plus: str = '', minus: str = '', mid: str = '', bulk: str = '') -> None:
+                        plus: str = '', minus: str = '', mid: str = '', bulk: str = '',
+                        connect_mid: bool = True) -> None:
         """Design a BAG_prim resistor (with series / parallel support).
 
         This is a convenient method to design a resistor consisting of a series / parallel network of resistor units.
@@ -939,6 +942,9 @@ class Module(DesignMaster):
             where X is a non-negative integer.
         bulk : str
             the bulk terminal name.  Empty string to not rename.
+        connect_mid : bool
+            True to connect intermediate nodes (i.e., resistor is constructed as a series of parallel units)
+            False to leave disconnected (i.e., resistor is constructed as series units in parallel)
         """
         inst = self.instances[inst_name]
         inst.design(**unit_params)
@@ -983,7 +989,17 @@ class Module(DesignMaster):
         if npar > 1:
             suf = f'<{npar - 1}:0>'
             for _name in inst_names:
-                self.rename_instance(_name, _name + suf)
+                new_conns = {}
+                if not connect_mid:
+                    _inst = self.instances[_name]
+                    _minus = _inst.get_connection('MINUS')
+                    _plus = _inst.get_connection('PLUS')
+                    if _minus != minus:
+                        new_conns['MINUS'] = _minus + suf
+                    if _plus != plus:
+                        new_conns['PLUS'] = _plus + suf
+
+                self.rename_instance(_name, _name + suf, new_conns.items())
 
     def replace_with_ideal_switch(self, inst_name: str, rclosed: str = 'rclosed',
                                   ropen: str = 'ropen', vclosed: str = 'vclosed',
