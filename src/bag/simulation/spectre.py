@@ -128,6 +128,10 @@ class SpectreInterface(SimProcessManager):
             # write initial conditions
             ic_line = 'ic'
             for key, val in init_voltages.items():
+                key = get_cdba_name_bits(key, DesignOutput.SPECTRE)
+                if len(key) > 1:
+                    raise ValueError("Separate initial bus into multiple values")
+                key = key[0]
                 ic_line += f' {key}={_format_val(val, precision)}'
 
             lines.append(ic_line)
