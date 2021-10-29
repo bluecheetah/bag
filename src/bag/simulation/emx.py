@@ -168,7 +168,7 @@ class EMXInterface(EmSimProcessManager):
             outfiles[-1].unlink()
 
         # get emx simulation working
-        emx_cmd = [f'{os.environ["EMX_HOME"]}/emx', str(self._gds_file), self._cell_name, str(self._proc_file)]
+        emx_cmd = [f'{os.environ["EMX_HOME"]}/bin/emx', str(self._gds_file), self._cell_name, str(self._proc_file)]
         print("EMX simulation started.")
         start = time.time()
         ret_code = await self.manager.async_new_subprocess(emx_cmd + emx_opts, cwd=str(self._em_base_path),
