@@ -2779,8 +2779,8 @@ class TemplateBase(DesignMaster):
         if mlm_dict is None:
             mlm_dict = {}
         bot_layer = warr.layer_id
-        assert bot_layer + 2 <= top_layer, f'top_layer={top_layer} must be at least 2 higher than ' \
-                                           f'bot_layer={bot_layer}  to have via stack'
+        # assert bot_layer + 2 <= top_layer, f'top_layer={top_layer} must be at least 2 higher than ' \
+        #                                    f'bot_layer={bot_layer}  to have via stack'
 
         # Make sure widths are enough so that we can via up to top_layer
         top_layer_w = tr_manager.get_width(top_layer, w_type)
