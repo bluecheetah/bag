@@ -773,6 +773,8 @@ def get_info(config: Dict[str, Any], output_dir: Path
     inc_list: Dict[int, List[str]] = {}
     populate_header(config['header'], inc_lines, inc_list)
     populate_mos(config['mos'], netlist_map, inc_lines)
+    if 'mos_rf' in config:
+        populate_mos(config['mos_rf'], netlist_map, inc_lines)
     populate_diode(config['diode'], netlist_map, inc_lines)
     populate_res_metal(config['res_metal'], netlist_map, inc_lines)
     populate_res(config['res'], netlist_map, inc_lines)
