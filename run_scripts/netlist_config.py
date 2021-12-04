@@ -139,7 +139,7 @@ netlist_map_default = {
             'nets': [],
             'out_terms': [],
             'props': {
-                'c': [3, ''],
+                'c': [3, '1u'],
             }
         },
         'dcfeed': {
@@ -151,7 +151,7 @@ netlist_map_default = {
             'nets': [],
             'out_terms': [],
             'props': {
-                'l': [3, ''],
+                'l': [3, '1u'],
             }
         },
         'idc': {
