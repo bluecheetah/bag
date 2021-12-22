@@ -250,6 +250,13 @@ class SpectreInterface(SimProcessManager):
         if ret_code is None or ret_code != 0 or not raw_path.is_dir():
             raise ValueError(f'Spectre simulation ended with error.  See log file: {log_path}')
 
+        # check last line of log file
+        with open(log_path, "r") as log_file:
+            for line in log_file:
+                pass
+        if 'completes with 0 errors' not in line:
+            raise ValueError(f'Spectre simulation ended with error.  See log file: {log_path}')
+
         # check if Monte Carlo sim
         for fname in raw_path.iterdir():
             if str(fname).endswith('Distributed'):
