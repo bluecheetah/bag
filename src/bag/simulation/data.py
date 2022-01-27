@@ -83,6 +83,10 @@ class SweepLinear:
     def stop_inc(self) -> float:
         return self.stop if self.endpoint else self.start + (self.num - 1) * self.step
 
+    @property
+    def values(self) -> np.ndarray:
+        return np.linspace(self.start, self.stop, self.num, self.endpoint)
+
 
 @dataclass(eq=True, frozen=True)
 class SweepLog:
