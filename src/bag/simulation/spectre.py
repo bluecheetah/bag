@@ -219,15 +219,16 @@ class SpectreInterface(SimProcessManager):
         env: Optional[Dict[str, str]] = sim_kwargs.get('env', None)
         run_64: bool = sim_kwargs.get('run_64', True)
         fmt: str = sim_kwargs.get('format', 'psfxl')
-        psf_version: str = sim_kwargs.get('psfversion', '1.1')
+        # psf_version: str = sim_kwargs.get('psfversion', '1.1')
         options = sim_kwargs.get('options', [])
 
         sim_cmd = [cmd_str, '-cols', '100', '-colslog', '100',
                    '-format', fmt, '-raw', f'{sim_tag}.raw']
 
-        if fmt == 'psfxl':
-            sim_cmd.append('-psfversion')
-            sim_cmd.append(psf_version)
+        # Spectre 191 gives "ERROR (SPECTRE-129): Invalid command line argument '-psfversion'"
+        # if fmt == 'psfxl':
+        #     sim_cmd.append('-psfversion')
+        #     sim_cmd.append(psf_version)
         if run_64:
             sim_cmd.append('-64')
         for opt in options:
