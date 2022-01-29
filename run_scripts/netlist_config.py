@@ -139,7 +139,7 @@ netlist_map_default = {
             'nets': [],
             'out_terms': [],
             'props': {
-                'c': [3, ''],
+                'c': [3, '1u'],
             }
         },
         'dcfeed': {
@@ -151,7 +151,7 @@ netlist_map_default = {
             'nets': [],
             'out_terms': [],
             'props': {
-                'l': [3, ''],
+                'l': [3, '1u'],
             }
         },
         'idc': {
@@ -517,60 +517,60 @@ res_default = {
 
 mos_cdl_fmt = """.SUBCKT {{ cell_name }} B D G S
 *.PININFO B:B D:B G:B S:B
-MM0 D G S B {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+{{ prefix }}M0 D G S B {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 .ENDS
 """
 
 dio_cdl_fmt = """.SUBCKT {{ cell_name }}{% if ports|length == 3 %} GUARD_RING{% endif %} MINUS PLUS
 *.PININFO{% if ports|length == 3 %} GUARD_RING:B{% endif %} MINUS:B PLUS:B
-XD0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+{{ prefix }}D0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 .ENDS
 """
 
 dio_cdl_fmt_static = """.SUBCKT {{ cell_name }}{% if ports|length == 3 %} GUARD_RING{% endif %} MINUS PLUS
 *.PININFO{% if ports|length == 3 %} GUARD_RING:B{% endif %} MINUS:B PLUS:B
-XD0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}
+{{ prefix }}D0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}
 .ENDS
 """
 
 res_metal_cdl_fmt = """.SUBCKT {{ cell_name }} MINUS PLUS
 *.PININFO MINUS:B PLUS:B
-RR0 PLUS MINUS {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+{{ prefix }}R0 PLUS MINUS {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 .ENDS
 """
 
 res_cdl_fmt = """.SUBCKT {{ cell_name }} BULK MINUS PLUS
 *.PININFO BULK:B MINUS:B PLUS:B
-XR0 PLUS MINUS BULK {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+{{ prefix }}R0 PLUS MINUS BULK {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 .ENDS
 """
 
 mos_spectre_fmt = """subckt {{ cell_name }} B D G S
 parameters l w nf
-MM0 D G S B {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+{{ prefix }}M0 D G S B {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 ends {{ cell_name }}
 """
 
 dio_spectre_fmt = """subckt {{ cell_name }}{% if ports|length == 3 %} GUARD_RING{% endif %} MINUS PLUS
 parameters l w
-XD0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+{{ prefix }}D0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 ends {{ cell_name }}
 """
 
 dio_spectre_fmt_static = """subckt {{ cell_name }}{% if ports|length == 3 %} GUARD_RING{% endif %} MINUS PLUS
-XD0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}
+{{ prefix }}D0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}
 ends {{ cell_name }}
 """
 
 res_metal_spectre_fmt = """subckt {{ cell_name }} MINUS PLUS
 parameters l w
-RR0 PLUS MINUS {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+{{ prefix }}R0 PLUS MINUS {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 ends {{ cell_name }}
 """
 
 res_spectre_fmt = """subckt {{ cell_name }} BULK MINUS PLUS
 parameters l w
-XR0 PLUS MINUS BULK {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+{{ prefix }}R0 PLUS MINUS BULK {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 ends {{ cell_name }}
 """
 
@@ -640,6 +640,19 @@ jinja_env = Environment(
     keep_trailing_newline=True,
 )
 
+prefix_dict = {
+    'mos_cdl': 'M',
+    'mos_scs': 'M',
+    'diode_cdl': 'X',
+    'diode_scs': 'X',
+    'diode_cdl_static': 'X',
+    'diode_scs_static': 'X',
+    'res_metal_cdl': 'R',
+    'res_metal_scs': 'R',
+    'res_cdl': 'R',
+    'res_scs': 'R'
+}
+
 
 def populate_header(config: Dict[str, Any], inc_lines: Dict[DesignOutput, List[str]],
                     inc_list: Dict[int, List[str]]) -> None:
@@ -667,6 +680,7 @@ def populate_mos(config: Dict[str, Any], netlist_map: Dict[str, Any],
                         cell_name=cell_name,
                         model_name=_get_model_name(model_name, v.name),
                         param_list=param_list,
+                        prefix=_get_prefix(config, v, template_name),
                     ))
 
 
@@ -699,6 +713,7 @@ def populate_diode(config: Dict[str, Any], netlist_map: Dict[str, Any],
                         model_name=_get_model_name(model_name, v.name),
                         ports=ports,
                         param_list=param_list,
+                        prefix=_get_prefix(config, v, template_name),
                     ))
 
 
@@ -727,6 +742,7 @@ def populate_res_metal(config: Dict[str, Any], netlist_map: Dict[str, Any],
                         cell_name=cell_name,
                         model_name=_get_model_name(model_name, v.name),
                         param_list=new_param_list,
+                        prefix=_get_prefix(config, v, template_name),
                     ))
 
 
@@ -749,6 +765,7 @@ def populate_res(config: Dict[str, Any], netlist_map: Dict[str, Any], inc_lines:
                         cell_name=cell_name,
                         model_name=_get_model_name(model_name, v.name),
                         param_list=param_list,
+                        prefix=_get_prefix(config, v, template_name),
                     ))
 
 
@@ -757,6 +774,15 @@ def _get_model_name(model_name: Union[str, Dict[str, str]], key: str) -> str:
         return model_name
     else:
         return model_name[key]
+
+
+def _get_prefix(config: Dict[str, Any], key: DesignOutput, template_name: str) -> str:
+    if key is DesignOutput.CDL or key is DesignOutput.SPECTRE:
+        prefix = config.get('prefix')
+        if prefix and key.name in prefix:
+            return prefix[key.name]
+        return prefix_dict[template_name]
+    return ''
 
 
 def populate_custom_cells(inc_lines: Dict[DesignOutput, List[str]]):
@@ -773,6 +799,8 @@ def get_info(config: Dict[str, Any], output_dir: Path
     inc_list: Dict[int, List[str]] = {}
     populate_header(config['header'], inc_lines, inc_list)
     populate_mos(config['mos'], netlist_map, inc_lines)
+    if 'mos_rf' in config:
+        populate_mos(config['mos_rf'], netlist_map, inc_lines)
     populate_diode(config['diode'], netlist_map, inc_lines)
     populate_res_metal(config['res_metal'], netlist_map, inc_lines)
     populate_res(config['res'], netlist_map, inc_lines)

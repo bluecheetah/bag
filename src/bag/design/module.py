@@ -646,6 +646,8 @@ class Module(DesignMaster):
                 'cap': 'C{}',
                 'cccs': 'CCCS{}',
                 'ccvs': 'CCVS{}',
+                'dcblock': 'C{}',
+                'dcfeed': 'L{}',
                 'idc': 'IDC{}',
                 'ideal_balun': 'BAL{}',
                 'ind': 'L{}',
@@ -673,6 +675,8 @@ class Module(DesignMaster):
                 'cap': 'c',
                 'cccs': 'fgain',
                 'ccvs': 'hgain',
+                'dcblock': 'c',
+                'dcfeed': 'l',
                 'idc': 'idc',
                 'ideal_balun': None,
                 'ind': 'l',
@@ -701,7 +705,7 @@ class Module(DesignMaster):
         for i, params_dict in enumerate(params_list):
             lib = params_dict.get('lib', 'analogLib')
             cell_type = params_dict['type']
-            value = params_dict.get('value', {})
+            value: Union[float, str, Mapping] = params_dict.get('value', {})
             conn_dict = params_dict['conns']
             if not isinstance(conn_dict, Mapping):
                 raise ValueError('Got a non dictionary for the connections in '

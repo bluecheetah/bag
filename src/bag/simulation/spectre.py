@@ -128,6 +128,10 @@ class SpectreInterface(SimProcessManager):
             # write initial conditions
             ic_line = 'ic'
             for key, val in init_voltages.items():
+                key = get_cdba_name_bits(key, DesignOutput.SPECTRE)
+                if len(key) > 1:
+                    raise ValueError("Separate initial bus into multiple values")
+                key = key[0]
                 ic_line += f' {key}={_format_val(val, precision)}'
 
             lines.append(ic_line)
@@ -222,15 +226,16 @@ class SpectreInterface(SimProcessManager):
         env: Optional[Dict[str, str]] = sim_kwargs.get('env', None)
         run_64: bool = sim_kwargs.get('run_64', True)
         fmt: str = sim_kwargs.get('format', 'psfxl')
-        psf_version: str = sim_kwargs.get('psfversion', '1.1')
+        # psf_version: str = sim_kwargs.get('psfversion', '1.1')
         options = sim_kwargs.get('options', [])
 
         sim_cmd = [cmd_str, '-cols', '100', '-colslog', '100',
                    '-format', fmt, '-raw', f'{sim_tag}.raw']
 
-        if fmt == 'psfxl':
-            sim_cmd.append('-psfversion')
-            sim_cmd.append(psf_version)
+        # Spectre 191 gives "ERROR (SPECTRE-129): Invalid command line argument '-psfversion'"
+        # if fmt == 'psfxl':
+        #     sim_cmd.append('-psfversion')
+        #     sim_cmd.append(psf_version)
         if run_64:
             sim_cmd.append('-64')
         for opt in options:
@@ -251,6 +256,13 @@ class SpectreInterface(SimProcessManager):
         ret_code = await self.manager.async_new_subprocess(sim_cmd, str(log_path),
                                                            env=env, cwd=str(cwd_path))
         if ret_code is None or ret_code != 0 or not raw_path.is_dir():
+            raise ValueError(f'Spectre simulation ended with error.  See log file: {log_path}')
+
+        # check last line of log file
+        with open(log_path, "r") as log_file:
+            for line in log_file:
+                pass
+        if 'completes with 0 errors' not in line:
             raise ValueError(f'Spectre simulation ended with error.  See log file: {log_path}')
 
         # check if Monte Carlo sim
