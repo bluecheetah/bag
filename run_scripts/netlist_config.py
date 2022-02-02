@@ -753,12 +753,14 @@ def populate_res(config: Dict[str, Any], netlist_map: Dict[str, Any], inc_lines:
         cur_info = copy.deepcopy(res_default)
         cur_info['cell_name'] = cell_name
         netlist_map[cell_name] = cur_info
+        num_ports: int = num_ports_dict.get(cell_name, 3)
+        if num_ports == 2:
+            cur_info['io_terms'].remove('BULK')
 
         # write bag_prim netlist
         for v, lines in inc_lines.items():
             param_list = config[v.name]
             template_name = supported_formats[v]['res']
-            num_ports: int = num_ports_dict.get(cell_name, 3)
             if template_name:
                 res_template = jinja_env.get_template(template_name)
                 lines.append('\n')
