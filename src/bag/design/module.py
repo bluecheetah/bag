@@ -651,6 +651,7 @@ class Module(DesignMaster):
                 'idc': 'IDC{}',
                 'ideal_balun': 'BAL{}',
                 'ind': 'L{}',
+                'iprobe': 'IPROBE{}',
                 'ipulse': 'IPULSE{}',
                 'ipwlf': 'IPWLF{}',
                 'isin': 'IAC{}',
@@ -679,6 +680,7 @@ class Module(DesignMaster):
                 'idc': 'idc',
                 'ideal_balun': None,
                 'ind': 'l',
+                'iprobe': None,
                 'ipulse': None,
                 'ipwlf': 'fileName',
                 'isin': 'acm',
@@ -703,7 +705,7 @@ class Module(DesignMaster):
         for i, params_dict in enumerate(params_list):
             lib = params_dict.get('lib', 'analogLib')
             cell_type = params_dict['type']
-            value: Union[float, str, Mapping] = params_dict['value']
+            value: Union[float, str, Mapping] = params_dict.get('value', {})
             conn_dict = params_dict['conns']
             if not isinstance(conn_dict, Mapping):
                 raise ValueError('Got a non dictionary for the connections in '
