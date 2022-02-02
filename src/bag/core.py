@@ -711,10 +711,8 @@ class BagProject:
         gen_specs_file: str = specs.get('gen_specs_file', '')
         if gen_specs_file:
             gen_specs: Mapping[str, Any] = read_yaml(gen_specs_file)
-            params_key = 'params'
         else:
             gen_specs = specs
-            params_key = 'dut_params'
 
         root_dir: Union[str, Path] = gen_specs['root_dir']
         impl_lib: str = gen_specs['impl_lib']
@@ -775,7 +773,7 @@ class BagProject:
             extract = extract and not has_netlist
             if not cv_info_list:
                 gen_netlist = self.generate_cell(gen_specs, raw=raw, gen_lay=extract, gen_sch=True,
-                                                 run_lvs=extract, run_rcx=extract, gen_netlist=extract,
+                                                 run_lvs=extract, run_rcx=extract, gen_netlist=True,
                                                  sim_netlist=True, sch_db=sch_db, lay_db=lay_db,
                                                  cv_info_out=cv_info_list, mismatch=mismatch)
                 if use_netlist_path is None:
