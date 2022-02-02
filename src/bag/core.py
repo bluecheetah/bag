@@ -708,9 +708,17 @@ class BagProject:
         sim_result : str
             simulation result file name.
         """
-        root_dir: Union[str, Path] = specs['root_dir']
-        impl_lib: str = specs['impl_lib']
-        impl_cell: str = specs['impl_cell']
+        gen_specs_file: str = specs.get('gen_specs_file', '')
+        if gen_specs_file:
+            gen_specs: Mapping[str, Any] = read_yaml(gen_specs_file)
+            params_key = 'params'
+        else:
+            gen_specs = specs
+            params_key = 'dut_params'
+
+        root_dir: Union[str, Path] = gen_specs['root_dir']
+        impl_lib: str = gen_specs['impl_lib']
+        impl_cell: str = gen_specs['impl_cell']
         use_netlist: str = specs.get('use_netlist', '')
         precision: int = specs.get('precision', 6)
         tb_params: Dict[str, Any] = specs.get('tb_params', {}).copy()
@@ -766,8 +774,8 @@ class BagProject:
             has_netlist = use_netlist_path is not None and use_netlist_path.is_file()
             extract = extract and not has_netlist
             if not cv_info_list:
-                gen_netlist = self.generate_cell(specs, raw=raw, gen_lay=extract, gen_sch=True,
-                                                 run_lvs=extract, run_rcx=extract,
+                gen_netlist = self.generate_cell(gen_specs, raw=raw, gen_lay=extract, gen_sch=True,
+                                                 run_lvs=extract, run_rcx=extract, gen_netlist=extract,
                                                  sim_netlist=True, sch_db=sch_db, lay_db=lay_db,
                                                  cv_info_out=cv_info_list, mismatch=mismatch)
                 if use_netlist_path is None:
