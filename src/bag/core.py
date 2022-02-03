@@ -263,6 +263,15 @@ class BagProject:
         sim_db = SimulationDB(log_file, dsn_db, **kwargs)
         return sim_db
 
+    def get_root_path(self, root_dir: Union[str, Path], use_sim_path: bool = True) -> Path:
+        if isinstance(root_dir, str):
+            root_path = Path(root_dir)
+        else:
+            root_path = root_dir
+        if not root_path.is_absolute() and use_sim_path:
+            root_path = self._sim._dir_path / root_path
+        return root_path.resolve()
+
     def generate_cell(self, specs: Dict[str, Any],
                       raw: bool = False,
                       gen_lay: bool = True,
@@ -384,10 +393,7 @@ class BagProject:
         else:
             lay_type_list: List[DesignOutput] = [DesignOutput[v] for v in lay_type_specs]
 
-        if isinstance(root_dir, str):
-            root_path = Path(root_dir)
-        else:
-            root_path = root_dir
+        root_path = self.get_root_path(root_dir, use_sim_path=False)
 
         gen_lay = gen_lay and has_lay
         gen_model = gen_model and model_params
@@ -625,7 +631,7 @@ class BagProject:
             final_netlist, rcx_log = self.run_rcx(lib_name, cell_name, params=rcx_params)
             if final_netlist:
                 print('RCX passed!')
-                root_path = Path(f'gen_outputs/{lib_name}/{cell_name}')
+                root_path = self.get_root_path(Path(f'gen_outputs/{lib_name}/{cell_name}'), use_sim_path=False)
                 root_path.mkdir(parents=True, exist_ok=True)
                 if isinstance(final_netlist, list):
                     for f in final_netlist:
@@ -732,10 +738,7 @@ class BagProject:
             tb_params['dut_lib'] = impl_lib
             tb_params['dut_cell'] = impl_cell
 
-        if isinstance(root_dir, str):
-            root_path = Path(root_dir).resolve()
-        else:
-            root_path = root_dir
+        root_path = self.get_root_path(root_dir, use_sim_path=True)
 
         netlist_type = self._sim.netlist_type
         tb_netlist_path = root_path / f'tb.{netlist_type.extension}'
@@ -888,10 +891,7 @@ class BagProject:
                 )]
         impl_lib: str = gen_specs['impl_lib']
         root_dir: Union[str, Path] = gen_specs['root_dir']
-        if isinstance(root_dir, str):
-            root_path = Path(root_dir)
-        else:
-            root_path = root_dir
+        root_path = self.get_root_path(root_dir, use_sim_path=True)
 
         # harnesses
         harness_specs_list: Sequence[Mapping[str, Any]] = specs.get('harness_specs_list', [])
@@ -1008,7 +1008,7 @@ class BagProject:
 
         gen_dut = (gen_dut or not load_from_file) and not use_netlist
 
-        root_path = Path(root_dir).resolve()
+        root_path = self.get_root_path(root_dir, use_sim_path=True)
 
         root_path.mkdir(parents=True, exist_ok=True)
         wrapper_lookup = {'': impl_cell}
@@ -1044,10 +1044,7 @@ class BagProject:
         params: Mapping[str, Any] = specs['params']
         process_output: bool = specs.get('process_output', True)
 
-        if isinstance(root_dir, str):
-            root_path = Path(root_dir)
-        else:
-            root_path = root_dir
+        root_path = self.get_root_path(root_dir, use_sim_path=True)
 
         gds_file = root_path / f'{impl_cell}.gds'
 
