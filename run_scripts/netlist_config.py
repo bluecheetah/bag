@@ -539,9 +539,9 @@ res_metal_cdl_fmt = """.SUBCKT {{ cell_name }} MINUS PLUS
 .ENDS
 """
 
-res_cdl_fmt = """.SUBCKT {{ cell_name }} BULK MINUS PLUS
-*.PININFO BULK:B MINUS:B PLUS:B
-{{ prefix }}R0 PLUS MINUS BULK {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+res_cdl_fmt = """.SUBCKT {{ cell_name }}{% if num_ports == 3 %} BULK{% endif %} MINUS PLUS
+*.PININFO{% if num_ports == 3 %} BULK:B{% endif %} MINUS:B PLUS:B
+{{ prefix }}R0 PLUS MINUS{% if num_ports == 3 %} BULK{% endif %} {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 .ENDS
 """
 
@@ -568,9 +568,9 @@ parameters l w
 ends {{ cell_name }}
 """
 
-res_spectre_fmt = """subckt {{ cell_name }} BULK MINUS PLUS
+res_spectre_fmt = """subckt {{ cell_name }}{% if num_ports == 3 %} BULK{% endif %} MINUS PLUS
 parameters l w
-{{ prefix }}R0 PLUS MINUS BULK {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+{{ prefix }}R0 PLUS MINUS{% if num_ports == 3 %} BULK{% endif %} {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 ends {{ cell_name }}
 """
 
@@ -686,7 +686,7 @@ def populate_mos(config: Dict[str, Any], netlist_map: Dict[str, Any],
 
 def populate_diode(config: Dict[str, Any], netlist_map: Dict[str, Any],
                    inc_lines: Dict[DesignOutput, List[str]]) -> None:
-    static: bool = config['static']
+    static: bool = config.get('static', False)
     template_key = 'diode_static' if static else 'diode'
 
     for cell_name, model_name in config['types']:
@@ -747,11 +747,15 @@ def populate_res_metal(config: Dict[str, Any], netlist_map: Dict[str, Any],
 
 
 def populate_res(config: Dict[str, Any], netlist_map: Dict[str, Any], inc_lines: Dict[DesignOutput, List[str]]) -> None:
+    num_ports_dict: Dict[str, int] = config.get('num_ports', {})
     for idx, (cell_name, model_name) in enumerate(config['types']):
         # populate netlist_map
         cur_info = copy.deepcopy(res_default)
         cur_info['cell_name'] = cell_name
         netlist_map[cell_name] = cur_info
+        num_ports: int = num_ports_dict.get(cell_name, 3)
+        if num_ports == 2:
+            cur_info['io_terms'].remove('BULK')
 
         # write bag_prim netlist
         for v, lines in inc_lines.items():
@@ -764,6 +768,7 @@ def populate_res(config: Dict[str, Any], netlist_map: Dict[str, Any], inc_lines:
                     res_template.render(
                         cell_name=cell_name,
                         model_name=_get_model_name(model_name, v.name),
+                        num_ports=num_ports,
                         param_list=param_list,
                         prefix=_get_prefix(config, v, template_name),
                     ))

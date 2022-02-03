@@ -256,8 +256,13 @@ class OAInterface(DbAccess):
         if lib_name not in self.lib_path_map:
             self.add_sch_library(lib_name)
 
-        # read schematic information
-        cell_list = self._oa_db.read_sch_recursive(lib_name, cell_name, view_name)
+        if lib_name == 'BAG_prim':
+            # reading BAG primitives library, don't need to parse YAML files,
+            # just get the cell list
+            cell_list = [(lib_name, cell_name)]
+        else:
+            # read schematic information
+            cell_list = self._oa_db.read_sch_recursive(lib_name, cell_name, view_name)
 
         # create python templates
         self._create_sch_templates(cell_list)
