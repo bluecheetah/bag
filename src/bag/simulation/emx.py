@@ -212,7 +212,7 @@ class EMXInterface(EmSimProcessManager):
             outfiles[1].unlink()
 
         # emx command
-        mdl_cmd = [f'{os.environ["EMX_HOME"]}/modelgen'] + mdl_opts
+        mdl_cmd = [f'{os.environ["EMX_HOME"]}/bin/modelgen'] + mdl_opts
         print("Model generation started.")
         start = time.time()
         ret_code = await self.manager.async_new_subprocess(mdl_cmd, cwd=str(self._em_base_path),
