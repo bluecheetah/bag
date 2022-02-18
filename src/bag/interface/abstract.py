@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Any, Sequence, List, Type
+from typing import Dict, Any, Sequence, Type
 
 from pathlib import Path
 
