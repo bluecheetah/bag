@@ -28,7 +28,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"""This module define utility classes for performing concurrent operations.
+"""This module define utility classes for launching subprocesses via IBM Load Sharing Facility (LSF).
 """
 
 from typing import Optional, Sequence, Dict, Union, Any, List
