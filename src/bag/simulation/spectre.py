@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Dict, Any, Sequence, Optional, List, Tuple, Un
 
 import re
 import shutil
+import time
 from pathlib import Path
 from itertools import chain
 
@@ -28,7 +29,7 @@ from pybag.enum import DesignOutput
 from pybag.core import get_cdba_name_bits
 
 from ..math import float_to_si_string
-from ..io.file import read_yaml, open_file
+from ..io.file import read_yaml, open_file, is_valid_file, read_file
 from ..io.string import wrap_string
 from ..util.immutable import ImmutableList
 from .data import (
@@ -251,14 +252,23 @@ class SpectreInterface(SimProcessManager):
 
         ret_code = await self.manager.async_new_subprocess(sim_cmd, str(log_path),
                                                            env=env, cwd=str(cwd_path))
-        if ret_code is None or ret_code != 0 or not raw_path.is_dir():
+        if ret_code is None or ret_code != 0:
             raise ValueError(f'Spectre simulation ended with error.  See log file: {log_path}')
 
-        # check last line of log file
-        with open(log_path, "r") as log_file:
-            for line in log_file:
-                pass
-        if 'completes with 0 errors' not in line:
+        # Check if raw_path is created (as a directory). Give some slack for IO latency
+        iter_cnt = 0
+        while not raw_path.is_dir():
+            if iter_cnt > 120:
+                raise ValueError(f'Spectre simulation ended with error.  See log file: {log_path}')
+            time.sleep(1)
+            iter_cnt += 1
+
+        if not is_valid_file(log_path, 'spectre completes with', 120, 1):
+            raise ValueError(f'Spectre simulation ended with error.  See log file: {log_path}')
+
+        log_contents = read_file(log_path)
+
+        if 'spectre completes with 0 errors' not in log_contents:
             raise ValueError(f'Spectre simulation ended with error.  See log file: {log_path}')
 
         # check if Monte Carlo sim
@@ -302,7 +312,9 @@ class SpectreInterface(SimProcessManager):
         sim_cmd = ['srr_to_hdf5', str(raw_path), str(hdf5_path), comp_str, rtol_str, atol_str]
         ret_code = await self.manager.async_new_subprocess(sim_cmd, str(log_path),
                                                            cwd=str(cwd_path))
-        if ret_code is None or ret_code != 0 or not hdf5_path.is_file():
+        if ret_code is None or ret_code != 0:
+            raise ValueError(f'srr_to_hdf5 ended with error.  See log file: {log_path}')
+        if not is_valid_file(hdf5_path, None, 120, 1):
             raise ValueError(f'srr_to_hdf5 ended with error.  See log file: {log_path}')
 
         # post-process HDF5 to convert to MD array

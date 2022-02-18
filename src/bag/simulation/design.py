@@ -100,10 +100,7 @@ class DesignerBase(LoggingBase, abc.ABC):
         precision: int = specs.get('precision', 6)
 
         dsn_cls = cast(Type[DesignerBase], import_class(dsn_str))
-        if isinstance(root_dir, str):
-            root_path = Path(root_dir)
-        else:
-            root_path = root_dir
+        root_path = prj.get_root_path(root_dir)
 
         dsn_options = dict(
             extract=extract,

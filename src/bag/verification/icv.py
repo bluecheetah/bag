@@ -133,7 +133,7 @@ class ICV(VirtuosoChecker):
         if cancel_timeout is not None:
             cancel_timeout /= 1e3
 
-        VirtuosoChecker.__init__(self, tmp_dir, max_workers, cancel_timeout, source_added_file)
+        VirtuosoChecker.__init__(self, tmp_dir, max_workers, cancel_timeout, source_added_file, **kwargs)
 
         self.default_rcx_params = rcx_params
         self.default_lvs_params = lvs_params

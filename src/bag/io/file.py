@@ -44,7 +44,7 @@
 """This module handles file related IO.
 """
 
-from typing import TextIO, Any, Iterable, Union, Dict
+from typing import TextIO, Any, Iterable, Union, Dict, Optional
 
 import os
 import time
@@ -138,6 +138,48 @@ def readlines_iter(fname: Union[str, Path]) -> Iterable[str]:
     with open_file(fname, 'r') as f:
         for line in f:
             yield line
+
+
+def is_valid_file(fname: Union[str, Path], ready_str: Optional[str], timeout: float, wait_intvl: float) -> bool:
+    """Checks if given file is valid by seeing if it exists and optionally contains a string.
+
+    Parameters
+    ----------
+    fname : Union[str, Path]
+        the file name.
+    ready_str : Optional[str]
+        the string to check if file is ready. None if we should only check to see if file exists
+    timeout : float
+        Maximum amount of time to wait.
+    wait_intvl: float
+        Amount of time in between iterations to check if file is ready
+
+    Returns
+    -------
+    is_valid : bool
+        True if file exists and optionally contains ready_str. False if timed out.
+    """
+    fname = Path(fname)
+    max_iter = timeout / wait_intvl
+    iter_cnt = 0
+    while not fname.is_file():
+        if iter_cnt > max_iter:
+            return False
+        time.sleep(wait_intvl)
+        iter_cnt += 1
+
+    if ready_str is None:
+        return True
+
+    content = read_file(fname)
+    while ready_str not in content:
+        if iter_cnt > max_iter:
+            return False
+        time.sleep(wait_intvl)
+        iter_cnt += 1
+        content = read_file(fname)
+
+    return True
 
 
 def read_yaml(fname: Union[str, Path]) -> Any:
