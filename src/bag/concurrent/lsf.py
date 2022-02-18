@@ -122,7 +122,74 @@ class LSFSubProcessManager(SubProcessManager):
                     raise err
 
     async def async_new_subprocess_flow(self, proc_info_list: Sequence[FlowInfo]) -> Any:
-        raise NotImplementedError("See developer")
+        """A coroutine which runs a series of subprocesses.
+
+        If this coroutine is cancelled, it will shut down the current subprocess gracefully using
+        SIGTERM/SIGKILL, then raise CancelledError.
+
+        Parameters
+        ----------
+        proc_info_list : Sequence[FlowInfo]
+            a list of processes to execute in series.  Each element is a tuple of:
+
+            args : Union[str, Sequence[str]]
+                command to run, as string or list of string arguments.
+            log : str
+                log file name.
+            env : Optional[Dict[str, str]]
+                environment variable dictionary.  None to inherit from parent.
+            cwd : Optional[str]
+                working directory path.  None to inherit from parent.
+            vfun : Sequence[Callable[[Optional[int], str], Any]]
+                a function to validate if it is ok to execute the next process.  The output of the
+                last function is returned.  The first argument is the return code, the second
+                argument is the log file name.
+
+        Returns
+        -------
+        result : Any
+            the return value of the last validate function.  None if validate function
+            returns False.
+        """
+        num_proc = len(proc_info_list)
+        if num_proc == 0:
+            return None
+
+        async with self._semaphore:
+            for idx, (args, log, env, cwd, vfun) in enumerate(proc_info_list):
+                if isinstance(args, str):
+                    args = [args]
+
+                log_path = Path(log).resolve()
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+
+                if cwd is not None:
+                    # make sure current working directory exists
+                    Path(cwd).mkdir(parents=True, exist_ok=True)
+
+                main_cmd = " ".join(args)
+
+                cmd_args = ['bsub', '-K', '-o', str(log_path), '-e', str(log_path)] + self._options + [f'"{main_cmd}"']
+                cmd = " ".join(cmd_args)
+
+                proc, retcode = None, None
+                with open(log_path, 'w') as logf:
+                    logf.write(f'command: {cmd}\n')
+                    logf.flush()
+                    try:
+                        # shell must be used to preserve paths and environment variables on compute host
+                        proc = await asyncio.create_subprocess_shell(cmd, stdout=logf, stderr=subprocess.STDOUT,
+                                                                     env=env, cwd=cwd)
+                        retcode = await proc.wait()
+                    except CancelledError as err:
+                        await self._kill_subprocess(proc)
+                        raise err
+
+                fun_output = vfun(retcode, str(log_path))
+                if idx == num_proc - 1:
+                    return fun_output
+                elif not fun_output:
+                    return None
 
     # Some utility functions that are currently unused; could be useful in the future for job scheduling
     @staticmethod

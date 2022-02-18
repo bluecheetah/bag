@@ -98,10 +98,10 @@ class VirtuosoChecker(SubProcessChecker, ABC):
                  env_vars: Dict[str, Dict[str, str]], link_files: Dict[str, List[str]],
                  params: Dict[str, Dict[str, Any]], max_workers: int = 0,
                  source_added_file: str = '', cancel_timeout_ms: int = 10000,
-                 enable_color: bool = False) -> None:
+                 enable_color: bool = False, **kwargs: Dict[str, Any]) -> None:
 
         cancel_timeout = cancel_timeout_ms / 1e3
-        SubProcessChecker.__init__(self, tmp_dir, max_workers, cancel_timeout)
+        SubProcessChecker.__init__(self, tmp_dir, max_workers, cancel_timeout, **kwargs)
 
         self._flow_config = get_flow_config(root_dir, template, env_vars, link_files, params)
         self._source_added_file = source_added_file

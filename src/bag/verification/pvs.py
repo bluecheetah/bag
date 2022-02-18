@@ -90,10 +90,10 @@ class PVS(VirtuosoChecker):
                  env_vars: Dict[str, Dict[str, str]], link_files: Dict[str, List[str]],
                  params: Dict[str, Dict[str, Any]],
                  lvs_cmd: str = 'pvs', max_workers: int = 0, source_added_file: str = '',
-                 cancel_timeout_ms: int = 10000, enable_color: bool = False) -> None:
+                 cancel_timeout_ms: int = 10000, enable_color: bool = False, **kwargs: Dict[str, Any]) -> None:
         VirtuosoChecker.__init__(self, tmp_dir, root_dir, template, env_vars, link_files,
                                  params, max_workers, source_added_file, cancel_timeout_ms,
-                                 enable_color)
+                                 enable_color, **kwargs)
 
         self._lvs_cmd = lvs_cmd
 

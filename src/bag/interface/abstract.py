@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, Any, Sequence
+from typing import Dict, Any, Sequence, List, Type
 
 from pathlib import Path
 
@@ -26,6 +26,7 @@ from ..env import get_bag_work_dir
 from ..io.file import write_file
 from ..io.template import new_template_env_fs
 from ..concurrent.core import SubProcessManager
+from ..util.importlib import import_class
 
 from .lef import LEFInterface
 
@@ -42,7 +43,10 @@ class AbstractInterface(LEFInterface):
     def __init__(self, config: Dict[str, Any]) -> None:
         LEFInterface.__init__(self, config)
 
-        self._manager = SubProcessManager(max_workers=1)
+        mgr_class: Type[SubProcessManager] = import_class(config.get('mgr_class', SubProcessManager))
+        mgr_kwargs: Dict[str, Any] = config.get('mgr_kwargs', {})
+
+        self._manager: SubProcessManager = mgr_class(max_workers=1, **mgr_kwargs)
         self._temp_env_fs = new_template_env_fs()
 
     def generate_lef(self, impl_lib: str, impl_cell: str, verilog_path: Path, lef_path: Path,

@@ -52,6 +52,7 @@ from enum import Enum
 from pathlib import Path
 
 from ..io import write_file, read_file
+from ..io.file import is_valid_file
 
 from .virtuoso import VirtuosoChecker, all_pass_callback
 
@@ -98,10 +99,10 @@ class Calibre(VirtuosoChecker):
                  env_vars: Dict[str, Dict[str, str]], link_files: Dict[str, List[str]],
                  params: Dict[str, Dict[str, Any]], rcx_program: str = 'pex', max_workers: int = 0,
                  source_added_file: str = '', cancel_timeout_ms: int = 10000,
-                 enable_color: bool = False) -> None:
+                 enable_color: bool = False, **kwargs: Dict[str, Any]) -> None:
         VirtuosoChecker.__init__(self, tmp_dir, root_dir, template, env_vars, link_files,
                                  params, max_workers, source_added_file, cancel_timeout_ms,
-                                 enable_color)
+                                 enable_color, **kwargs)
 
         self._rcx_mode: RCXMode = RCXMode[rcx_program]
 
@@ -156,15 +157,14 @@ class Calibre(VirtuosoChecker):
             out_file: Path = fpath.parent
             if self._rcx_mode is RCXMode.qrc or self._rcx_mode is RCXMode.starrc:
                 out_file = out_file.joinpath(f'{cell_name}.spf')
-                if not out_file.is_file():
+                if not is_valid_file(out_file, None, 60, 1):
                     return '', log_file
                 out_file_str = str(out_file)
             elif self._rcx_mode is RCXMode.xrc or self._rcx_mode is RCXMode.xact:
                 out_file = out_file.joinpath(f'{cell_name}.pex.netlist')
-                if not out_file.is_file():
+                if not is_valid_file(out_file, None, 60, 1):
                     return '', log_file
                 parent_dir = out_file.resolve().parent
-                # cell_name_upper = str(cell_name).upper()
                 out_file_str = [parent_dir.joinpath(f'{cell_name}.pex.netlist'),
                                 parent_dir.joinpath(f'{cell_name}.pex.netlist.pex'),
                                 parent_dir.joinpath(f'{cell_name}.pex.netlist.{cell_name}.pxi'),
@@ -253,8 +253,8 @@ def _drc_passed_check(retcode: int, log_file: str) -> Tuple[bool, str]:
         the log file name.
     """
     fpath = Path(log_file)
-    if not fpath.is_file():
-        return False, ''
+    if not is_valid_file(fpath, '--- TOTAL RESULTS GENERATED', 60, 1):
+        return False, log_file if fpath.is_file() else ''
 
     cmd_output = read_file(fpath)
     test_str = '--- TOTAL RESULTS GENERATED = 0 (0)'
@@ -280,8 +280,8 @@ def _lvs_passed_check(retcode: int, log_file: str) -> Tuple[bool, str]:
         the log file name.
     """
     fpath = Path(log_file)
-    if not fpath.is_file():
-        return False, ''
+    if not is_valid_file(fpath, 'LVS completed.', 60, 1):
+        return False, log_file if fpath.is_file() else ''
 
     cmd_output = read_file(fpath)
     test_str = 'LVS completed. CORRECT. See report file:'

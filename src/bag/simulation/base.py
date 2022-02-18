@@ -48,7 +48,7 @@ This module defines SimAccess, which provides methods to run simulations
 and retrieve results.
 """
 
-from typing import Mapping, Any, Tuple, Union, Sequence
+from typing import Mapping, Any, Tuple, Union, Sequence, Dict, Type
 
 import abc
 from pathlib import Path
@@ -57,6 +57,7 @@ from pybag.enum import DesignOutput
 from pybag.core import get_cdba_name_bits
 
 from ..concurrent.core import SubProcessManager, batch_async_task
+from ..util.importlib import import_class
 from .data import SimNetlistInfo, SimData
 
 
@@ -170,9 +171,13 @@ class SimProcessManager(SimAccess, abc.ABC):
     def __init__(self, tmp_dir: str, sim_config: Mapping[str, Any]) -> None:
         SimAccess.__init__(self, tmp_dir, sim_config)
 
+        mgr_class: Type[SubProcessManager] = import_class(sim_config.get('mgr_class', SubProcessManager))
+        mgr_kwargs: Dict[str, Any] = sim_config.get('mgr_kwargs', {})
+
         cancel_timeout = sim_config.get('cancel_timeout_ms', 10000) / 1e3
-        self._manager = SubProcessManager(max_workers=sim_config.get('max_workers', 0),
-                                          cancel_timeout=cancel_timeout)
+
+        self._manager: SubProcessManager = mgr_class(max_workers=sim_config.get('max_workers', 0),
+                                                     cancel_timeout=cancel_timeout, **mgr_kwargs)
 
     @property
     def manager(self) -> SubProcessManager:
@@ -227,9 +232,13 @@ class EmSimProcessManager(EmSimAccess, abc.ABC):
     def __init__(self, tmp_dir: str, sim_config: Mapping[str, Any], **kwargs) -> None:
         EmSimAccess.__init__(self, tmp_dir, sim_config, **kwargs)
 
+        mgr_class: Type[SubProcessManager] = import_class(sim_config.get('mgr_class', SubProcessManager))
+        mgr_kwargs: Dict[str, Any] = sim_config.get('mgr_kwargs', {})
+
         cancel_timeout = sim_config.get('cancel_timeout_ms', 10000) / 1e3
-        self._manager = SubProcessManager(max_workers=sim_config.get('max_workers', 0),
-                                          cancel_timeout=cancel_timeout)
+
+        self._manager: SubProcessManager = mgr_class(max_workers=sim_config.get('max_workers', 0),
+                                                     cancel_timeout=cancel_timeout, **mgr_kwargs)
 
     @property
     def manager(self) -> SubProcessManager:

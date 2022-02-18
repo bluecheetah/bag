@@ -45,13 +45,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Dict, Any, Tuple, Sequence, Optional, Union
+from typing import TYPE_CHECKING, List, Dict, Any, Tuple, Sequence, Optional, Union, Type
 
 import abc
 from pathlib import Path
 
 from ..io.template import new_template_env
 from ..concurrent.core import SubProcessManager
+from ..util.importlib import import_class
 
 if TYPE_CHECKING:
     from ..concurrent.core import FlowInfo, ProcInfo
@@ -264,11 +265,23 @@ class SubProcessChecker(Checker, abc.ABC):
         maximum number of parallel processes.
     cancel_timeout : float
         timeout for cancelling a subprocess.
+    mgr_class: Type[SubProcessManager]
+        class for subprocess manager. Default is SubProcessManager.
+    mgr_kwargs: Optional[Dict[str, Any]]
+        constructor arguments for subprocess manager class. If None, no arguments are passed in.
+        Default is None.
     """
 
-    def __init__(self, tmp_dir: str, max_workers: int, cancel_timeout: float) -> None:
+    def __init__(self, tmp_dir: str, max_workers: int, cancel_timeout: float,
+                 mgr_class: Type[SubProcessManager] = SubProcessManager,
+                 mgr_kwargs: Optional[Dict[str, Any]] = None) -> None:
         Checker.__init__(self, tmp_dir)
-        self._manager = SubProcessManager(max_workers=max_workers, cancel_timeout=cancel_timeout)
+
+        mgr_class: Type[SubProcessManager] = import_class(mgr_class)
+        mgr_kwargs: Dict[str, Any] = mgr_kwargs or {}
+
+        self._manager: SubProcessManager = mgr_class(max_workers=max_workers, cancel_timeout=cancel_timeout,
+                                                     **mgr_kwargs)
 
     @abc.abstractmethod
     def setup_drc_flow(self, lib_name: str, cell_name: str, lay_view: str = 'layout',
