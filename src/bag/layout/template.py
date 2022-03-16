@@ -2803,8 +2803,11 @@ class TemplateBase(DesignMaster):
             # Divide by 2 for via separation
             num_wires_o = tr_manager.get_num_wires_between(top_layer_o, w_type, tidx_l, w_type, tidx_r, w_type) + 2
             num_wires_o = max(-(- num_wires_o // 2), 1)
-            tidx_list_o = tr_manager.spread_wires(top_layer_o, [w_type] * num_wires_o, tidx_l, tidx_r, (w_type, w_type),
-                                                  alignment=alignment_o)
+            if num_wires_o == 1:
+                tidx_list_o = [self.grid.coord_to_track(top_layer_o, warr.middle, RoundMode.NEAREST)]
+            else:
+                tidx_list_o = tr_manager.spread_wires(top_layer_o, [w_type] * num_wires_o, tidx_l, tidx_r,
+                                                      (w_type, w_type), alignment=alignment_o)
             # need to compute coord_list for conversion to tidx in layers which are same direction as top_layer_o
             coord_list_o = [self.grid.track_to_coord(top_layer_o, tidx) for tidx in tidx_list_o]
         else:
@@ -2824,7 +2827,7 @@ class TemplateBase(DesignMaster):
                                          f'specified by TrackManager.'
             _mlm = mlm_dict.get(_layer, MinLenMode.MIDDLE)
             if _dir == bot_dir:
-                if coord_list_p_override is None:
+                if coord_list_p_override is None and len(coord_list_p) > 1:
                     tidx_l = self.grid.coord_to_track(_layer, coord_list_p[0], RoundMode.NEAREST)
                     tidx_r = self.grid.coord_to_track(_layer, coord_list_p[-1], RoundMode.NEAREST)
                     # Divide by 2 for via separation
