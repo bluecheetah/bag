@@ -1018,7 +1018,7 @@ class TemplateBase(DesignMaster):
             cur_geo_list.extend(geo_list)
 
     def add_pin_primitive(self, net_name: str, layer: str, bbox: BBox, *,
-                          label: str = '', show: bool = True, hide: bool = False,
+                          label: str = '', show: Optional[bool] = None, hide: bool = False,
                           connect: bool = False):
         """Add a primitive pin to the layout.
 
@@ -1035,8 +1035,8 @@ class TemplateBase(DesignMaster):
             this argument is used if you need the label to be different than net name
             for LVS purposes.  For example, unconnected pins usually need a colon after
             the name to indicate that LVS should short those pins together.
-        show : bool
-            True to draw the pin in layout.
+        show : Optional[bool]
+            True to draw the pin in layout. If None, use self.show_pins
         hide : bool
             True to add a hidden pin.
         connect : bool
