@@ -812,8 +812,8 @@ class DbAccess(InterfaceBase, abc.ABC):
             raise Exception('DRC/LVS/RCX is disabled.')
         return await self.checker.async_run_rcx(lib_name, cell_name, **kwargs)
 
-    async def async_compare_gds(self, gds_file: str, ref_file: str, **kwargs: Any) -> Tuple[bool, str]:
-        """A coroutine for running GDS comparison.
+    async def async_run_lvl(self, gds_file: str, ref_file: str, **kwargs: Any) -> Tuple[bool, str]:
+        """A coroutine for running LVL with gds files.
 
         Parameters
         ----------
@@ -827,13 +827,13 @@ class DbAccess(InterfaceBase, abc.ABC):
         Returns
         -------
         value : bool
-            True if GDS comparison succeeds
+            True if LVL succeeds
         log_fname : str
-            name of the GDS comparison log file.
+            name of the LVL log file.
         """
         if self.checker is None:
             return gds_equal(gds_file, ref_file), ''
-        return await self.checker.async_compare_gds(gds_file, ref_file, **kwargs)
+        return await self.checker.async_run_lvl(gds_file, ref_file, **kwargs)
 
     async def async_export_layout(self, lib_name: str, cell_name: str,
                                   out_file: str, **kwargs: Any) -> str:

@@ -233,12 +233,11 @@ class Calibre(VirtuosoChecker):
 
         return ctl_path
 
-    def setup_gds_compare_flow(self, gds_file: str, ref_file: str, run_dir: Union[str, Path] = ''
-                               ) -> Sequence[FlowInfo]:
+    def setup_lvl_flow(self, gds_file: str, ref_file: str, run_dir: Union[str, Path] = '') -> Sequence[FlowInfo]:
         cmd = ['dbdiff', '-system', 'GDS', '-design', gds_file, '-refdesign', ref_file, '-automatch']
         log_path = run_dir / 'bag_dbdiff.log'
 
-        return [(cmd, str(log_path), None, str(run_dir), _dbdiff_passed_check)]
+        return [(cmd, str(log_path), None, str(run_dir), _lvl_passed_check)]
 
 
 # noinspection PyUnusedLocal
@@ -296,20 +295,20 @@ def _lvs_passed_check(retcode: int, log_file: str) -> Tuple[bool, str]:
 
 
 # noinspection PyUnusedLocal
-def _dbdiff_passed_check(retcode: int, log_file: str) -> Tuple[bool, str]:
-    """Check if dbdiff passed
+def _lvl_passed_check(retcode: int, log_file: str) -> Tuple[bool, str]:
+    """Check if LVL passed
 
     Parameters
     ----------
     retcode : int
-        return code of the dbdiff process.
+        return code of the LVL process.
     log_file : str
         log file name.
 
     Returns
     -------
     success : bool
-        True if GDS comparison passed.
+        True if LVL passed.
     log_file : str
         the log file name.
     """

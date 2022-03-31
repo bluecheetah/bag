@@ -294,7 +294,7 @@ class DesignDB(LoggingBase):
             return True
         if is_valid_file(gds_file, None, 60, 1):
             ref_file = str(cur_dir / 'layout.gds')
-            _passed, _log = await self._db.async_compare_gds(gds_file, ref_file, run_dir=cur_dir)
+            _passed, _log = await self._db.async_run_lvl(gds_file, ref_file, run_dir=cur_dir)
             return _passed
         return False
 

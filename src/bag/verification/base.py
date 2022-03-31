@@ -194,9 +194,8 @@ class Checker(abc.ABC):
         return '', ''
 
     @abc.abstractmethod
-    async def async_compare_gds(self, gds_file: str, ref_file: str,  run_dir: Union[str, Path] = ''
-                                ) -> Tuple[bool, str]:
-        """A coroutine for comparing two GDS files.
+    async def async_run_lvl(self, gds_file: str, ref_file: str,  run_dir: Union[str, Path] = '') -> Tuple[bool, str]:
+        """A coroutine for running LVL with two gds files.
 
         Parameters
         ----------
@@ -210,9 +209,9 @@ class Checker(abc.ABC):
         Returns
         -------
         success : bool
-            True if GDS comparison succeeds.
+            True if LVL succeeds.
         log_fname : str
-            GDS comparison log file name.
+            LVL log file name.
         """
         return False, ''
 
@@ -444,9 +443,8 @@ class SubProcessChecker(Checker, abc.ABC):
         return []
 
     # noinspection PyMethodMayBeStatic
-    def setup_gds_compare_flow(self, gds_file: str, ref_file: str, run_dir: Union[str, Path] = ''
-                               ) -> Sequence[FlowInfo]:
-        """This method performs any setup necessary to configure a GDS comparison subprocess flow.
+    def setup_lvl_flow(self, gds_file: str, ref_file: str, run_dir: Union[str, Path] = '') -> Sequence[FlowInfo]:
+        """This method performs any setup necessary to configure a LVL subprocess flow.
 
         Parameters
         ----------
@@ -460,7 +458,7 @@ class SubProcessChecker(Checker, abc.ABC):
         Returns
         -------
         flow_info : Sequence[FlowInfo]
-            the GDS comparison flow information list.  Each element is a tuple of:
+            the LVL flow information list.  Each element is a tuple of:
 
             args : Union[str, Sequence[str]]
                 command to run, as string or list of string arguments.
@@ -563,8 +561,8 @@ class SubProcessChecker(Checker, abc.ABC):
                                         netlist, params, run_dir)
         return await self._manager.async_new_subprocess_flow(flow_info)
 
-    async def async_compare_gds(self, gds_file: str, ref_file: str, run_dir: Union[str, Path] = '') -> Tuple[bool, str]:
-        flow_info = self.setup_gds_compare_flow(gds_file, ref_file, run_dir)
+    async def async_run_lvl(self, gds_file: str, ref_file: str, run_dir: Union[str, Path] = '') -> Tuple[bool, str]:
+        flow_info = self.setup_lvl_flow(gds_file, ref_file, run_dir)
         if flow_info:
             return await self._manager.async_new_subprocess_flow(flow_info)
         else:
