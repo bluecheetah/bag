@@ -61,7 +61,7 @@ if TYPE_CHECKING:
 
 
 class Checker(abc.ABC):
-    """A class that handles DRC/LVS/RCX/GDS compare.
+    """A class that handles DRC/LVS/RCX/LVL.
 
     Parameters
     ----------
