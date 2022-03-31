@@ -233,6 +233,12 @@ class Calibre(VirtuosoChecker):
 
         return ctl_path
 
+    def setup_lvl_flow(self, gds_file: str, ref_file: str, run_dir: Union[str, Path] = '') -> Sequence[FlowInfo]:
+        cmd = ['dbdiff', '-system', 'GDS', '-design', gds_file, '-refdesign', ref_file, '-automatch']
+        log_path = run_dir / 'bag_dbdiff.log'
+
+        return [(cmd, str(log_path), None, str(run_dir), _lvl_passed_check)]
+
 
 # noinspection PyUnusedLocal
 def _drc_passed_check(retcode: int, log_file: str) -> Tuple[bool, str]:
@@ -285,4 +291,31 @@ def _lvs_passed_check(retcode: int, log_file: str) -> Tuple[bool, str]:
 
     cmd_output = read_file(fpath)
     test_str = 'LVS completed. CORRECT. See report file:'
+    return test_str in cmd_output, log_file
+
+
+# noinspection PyUnusedLocal
+def _lvl_passed_check(retcode: int, log_file: str) -> Tuple[bool, str]:
+    """Check if LVL passed
+
+    Parameters
+    ----------
+    retcode : int
+        return code of the LVL process.
+    log_file : str
+        log file name.
+
+    Returns
+    -------
+    success : bool
+        True if LVL passed.
+    log_file : str
+        the log file name.
+    """
+    fpath = Path(log_file)
+    if not is_valid_file(fpath, 'Summary Report', 60, 1):
+        return False, log_file if fpath.is_file() else ''
+
+    cmd_output = read_file(fpath)
+    test_str = 'DESIGNS IN COMPARISON ARE SAME'
     return test_str in cmd_output, log_file

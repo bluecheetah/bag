@@ -137,9 +137,11 @@ class SubProcessManager:
     cancel_timeout : float
         Number of seconds to wait for a process to terminate once SIGTERM or
         SIGKILL is issued.  Defaults to 10 seconds.
+    **kwargs: Any
+        Optional keyword arguments.
     """
 
-    def __init__(self, max_workers: int = 0, cancel_timeout: float = 10.0) -> None:
+    def __init__(self, max_workers: int = 0, cancel_timeout: float = 10.0, **kwargs: Any) -> None:
         if max_workers == 0:
             max_workers = multiprocessing.cpu_count()
 

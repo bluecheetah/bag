@@ -50,6 +50,8 @@ from typing import TYPE_CHECKING, List, Dict, Any, Tuple, Sequence, Optional, Un
 import abc
 from pathlib import Path
 
+from pybag.core import gds_equal
+
 from ..io.template import new_template_env
 from ..concurrent.core import SubProcessManager
 from ..util.importlib import import_class
@@ -59,7 +61,7 @@ if TYPE_CHECKING:
 
 
 class Checker(abc.ABC):
-    """A class that handles LVS/RCX.
+    """A class that handles DRC/LVS/RCX/LVL.
 
     Parameters
     ----------
@@ -113,9 +115,9 @@ class Checker(abc.ABC):
         Returns
         -------
         success : bool
-            True if LVS succeeds.
+            True if DRC succeeds.
         log_fname : str
-            LVS log file name.
+            DRC log file name.
         """
         return False, ''
 
@@ -190,6 +192,28 @@ class Checker(abc.ABC):
             RCX log file name.
         """
         return '', ''
+
+    @abc.abstractmethod
+    async def async_run_lvl(self, gds_file: str, ref_file: str,  run_dir: Union[str, Path] = '') -> Tuple[bool, str]:
+        """A coroutine for running LVL with two gds files.
+
+        Parameters
+        ----------
+        gds_file : str
+            name of the current gds to be compared.
+        ref_file : str
+            name of the reference gds file.
+        run_dir : Union[str, Path]
+            Defaults to empty string.  The run directory, use empty string for default.
+
+        Returns
+        -------
+        success : bool
+            True if LVL succeeds.
+        log_fname : str
+            LVL log file name.
+        """
+        return False, ''
 
     @abc.abstractmethod
     async def async_export_layout(self, lib_name: str, cell_name: str, out_file: str,
@@ -418,6 +442,39 @@ class SubProcessChecker(Checker, abc.ABC):
         """
         return []
 
+    # noinspection PyMethodMayBeStatic
+    def setup_lvl_flow(self, gds_file: str, ref_file: str, run_dir: Union[str, Path] = '') -> Sequence[FlowInfo]:
+        """This method performs any setup necessary to configure a LVL subprocess flow.
+
+        Parameters
+        ----------
+        gds_file : str
+            name of the current gds to be compared.
+        ref_file : str
+            name of the reference gds file.
+        run_dir : Union[str, Path]
+            Defaults to empty string.  The run directory, use empty string for default.
+
+        Returns
+        -------
+        flow_info : Sequence[FlowInfo]
+            the LVL flow information list.  Each element is a tuple of:
+
+            args : Union[str, Sequence[str]]
+                command to run, as string or list of string arguments.
+            log : str
+                log file name.
+            env : Optional[Dict[str, str]]
+                environment variable dictionary.  None to inherit from parent.
+            cwd : Optional[str]
+                working directory path.  None to inherit from parent.
+            vfun : Sequence[Callable[[Optional[int], str], Any]]
+                a function to validate if it is ok to execute the next process.  The output of the
+                last function is returned.  The first argument is the return code, the
+                second argument is the log file name.
+        """
+        return []
+
     @abc.abstractmethod
     def setup_export_layout(self, lib_name: str, cell_name: str, out_file: str,
                             view_name: str = 'layout', params: Optional[Dict[str, Any]] = None
@@ -503,6 +560,13 @@ class SubProcessChecker(Checker, abc.ABC):
         flow_info = self.setup_rcx_flow(lib_name, cell_name, sch_view, lay_view, layout,
                                         netlist, params, run_dir)
         return await self._manager.async_new_subprocess_flow(flow_info)
+
+    async def async_run_lvl(self, gds_file: str, ref_file: str, run_dir: Union[str, Path] = '') -> Tuple[bool, str]:
+        flow_info = self.setup_lvl_flow(gds_file, ref_file, run_dir)
+        if flow_info:
+            return await self._manager.async_new_subprocess_flow(flow_info)
+        else:
+            return gds_equal(gds_file, ref_file), ''
 
     async def async_export_layout(self, lib_name: str, cell_name: str,
                                   out_file: str, view_name: str = 'layout',

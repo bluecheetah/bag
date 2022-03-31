@@ -27,7 +27,7 @@ from pathlib import Path
 from dataclasses import dataclass
 
 from pybag.enum import DesignOutput, LogLevel
-from pybag.core import FileLogger, gds_equal, PySchCellViewInfo
+from pybag.core import FileLogger, PySchCellViewInfo
 
 from ..env import get_gds_layer_map, get_gds_object_map
 from ..io.file import read_yaml, write_yaml, is_valid_file
@@ -261,8 +261,8 @@ class DesignDB(LoggingBase):
             for dir_name in dir_list:
                 cur_dir = self._root_dir / dir_name
                 if filecmp.cmp(cdl_netlist, cur_dir / 'netlist.cdl', shallow=False):
-                    if (not gds_file) or (is_valid_file(gds_file, None, 60, 1) and
-                                          gds_equal(gds_file, str(cur_dir / 'layout.gds'))):
+                    is_cached = await self.gds_check_cache(gds_file, cur_dir)
+                    if is_cached:
                         self.log('Found existing design, reusing DUT netlist.')
                         dir_path = cur_dir
                         break
@@ -288,6 +288,15 @@ class DesignDB(LoggingBase):
 
         return DesignInstance(self._sch_db.lib_name, impl_cell, sch_master, lay_master, ans, cv_info_out,
                               list(sch_master.pins.keys())), extract_info
+
+    async def gds_check_cache(self, gds_file: str, cur_dir: Path) -> bool:
+        if not gds_file:
+            return True
+        if is_valid_file(gds_file, None, 60, 1):
+            ref_file = str(cur_dir / 'layout.gds')
+            _passed, _log = await self._db.async_run_lvl(gds_file, ref_file, run_dir=cur_dir)
+            return _passed
+        return False
 
     async def _extract_netlist(self, dsn_dir: Path, impl_cell: str, rcx_params: Mapping[str, Any],
                                static: bool = False, impl_lib: str = '') -> None:
