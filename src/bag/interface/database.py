@@ -53,6 +53,8 @@ import importlib
 import traceback
 from pathlib import Path
 
+from pybag.core import gds_equal
+
 from ..io.file import make_temp_dir, open_file, read_file
 from ..verification import make_checker
 from ..layout.routing.grid import RoutingGrid
@@ -809,6 +811,29 @@ class DbAccess(InterfaceBase, abc.ABC):
         if self.checker is None:
             raise Exception('DRC/LVS/RCX is disabled.')
         return await self.checker.async_run_rcx(lib_name, cell_name, **kwargs)
+
+    async def async_compare_gds(self, gds_file: str, ref_file: str, **kwargs: Any) -> Tuple[bool, str]:
+        """A coroutine for running GDS comparison.
+
+        Parameters
+        ----------
+        gds_file : str
+            name of the current gds to be compared.
+        ref_file : str
+            name of the reference gds file.
+        **kwargs : Any
+            optional keyword arguments.  See Checker class for details.
+
+        Returns
+        -------
+        value : bool
+            True if GDS comparison succeeds
+        log_fname : str
+            name of the GDS comparison log file.
+        """
+        if self.checker is None:
+            return gds_equal(gds_file, ref_file), ''
+        return await self.checker.async_compare_gds(gds_file, ref_file, **kwargs)
 
     async def async_export_layout(self, lib_name: str, cell_name: str,
                                   out_file: str, **kwargs: Any) -> str:
