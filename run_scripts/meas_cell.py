@@ -33,6 +33,10 @@ def parse_options() -> argparse.Namespace:
                         help='Run extracted simulation')
     parser.add_argument('-c', '--gen_cell', action='store_true', default=False,
                         help='Generate testbench schematics and DUT for debugging.')
+    parser.add_argument('-cd', '--gen_cell_dut', action='store_true', default=False,
+                        help='Generate only DUT for debugging.')
+    parser.add_argument('-ct', '--gen_cell_tb', action='store_true', default=False,
+                        help='Generate only testbench schematics for debugging.')
     parser.add_argument('-q', '--quiet', action='store_true', default=False,
                         help='Print only warning messages or above.')
     parser.add_argument('-f', '--fake', action='store_true', default=False,
@@ -49,8 +53,8 @@ def run_main(prj: BagProject, args: argparse.Namespace) -> None:
     specs: Mapping[str, Any] = read_yaml(args.specs)
 
     log_level = LogLevel.WARN if args.quiet else LogLevel.INFO
-    prj.measure_cell(specs, extract=args.extract, force_sim=args.force_sim,
-                     force_extract=args.force_extract, gen_cell=args.gen_cell,
+    prj.measure_cell(specs, extract=args.extract, force_sim=args.force_sim, force_extract=args.force_extract,
+                     gen_cell=args.gen_cell, gen_cell_dut=args.gen_cell_dut, gen_cell_tb=args.gen_cell_tb,
                      log_level=log_level, fake=args.fake)
 
 

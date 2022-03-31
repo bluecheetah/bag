@@ -852,14 +852,16 @@ class BagProject:
 
         return sim_result
 
-    def measure_cell(self, specs: Mapping[str, Any], extract: bool = False,
-                     force_sim: bool = False, force_extract: bool = False, gen_cell: bool = False,
-                     fake: bool = False, log_level: LogLevel = LogLevel.DEBUG) -> None:
+    def measure_cell(self, specs: Mapping[str, Any], extract: bool = False, force_sim: bool = False,
+                     force_extract: bool = False, gen_cell: bool = False, gen_cell_dut: bool = False,
+                     gen_cell_tb: bool = False, fake: bool = False, log_level: LogLevel = LogLevel.DEBUG) -> None:
         meas_str: Union[str, Type[MeasurementManager]] = specs['meas_class']
         meas_name: str = specs['meas_name']
         meas_params: Dict[str, Any] = specs['meas_params']
         precision: int = specs.get('precision', 6)
         rcx_params: Optional[Mapping[str, Any]] = specs.get('rcx_params', None)
+        gen_cell_dut |= gen_cell
+        gen_cell_tb |= gen_cell
 
         # DUT
         no_dut = False
@@ -887,7 +889,7 @@ class BagProject:
                     dut_cls=gen_specs.get('dut_class') or gen_specs['lay_class'],
                     dut_params=gen_specs[params_key],
                     extract=extract,
-                    export_lay=gen_cell & extract,
+                    export_lay=gen_cell_dut & extract,
                 )]
         impl_lib: str = gen_specs['impl_lib']
         root_dir: Union[str, Path] = gen_specs['root_dir']
@@ -916,7 +918,7 @@ class BagProject:
                     dut_cls=_gen_specs.get('dut_class') or _gen_specs['lay_class'],
                     dut_params=_gen_specs[_params_key],
                     extract=extract,
-                    export_lay=gen_cell & extract,
+                    export_lay=gen_cell_dut & extract,
                 ))
 
         meas_rel_dir: str = specs.get('meas_rel_dir', '')
@@ -929,7 +931,7 @@ class BagProject:
         dsn_options = dict(
             extract=extract,
             force_extract=force_extract,
-            gen_sch=gen_cell,
+            gen_sch=gen_cell_tb,
             log_level=log_level,
         )
         log_file = str(meas_path / 'meas.log')

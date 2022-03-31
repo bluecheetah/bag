@@ -2812,13 +2812,15 @@ class TemplateBase(DesignMaster):
             coord_list_o = [self.grid.track_to_coord(top_layer_o, tidx) for tidx in tidx_list_o]
         else:
             num_wires_o = len(coord_list_o_override)
-            coord_list_o = coord_list_o_override
+            coord_list_o = list(coord_list_o_override)
+            coord_list_o.sort()
 
         if coord_list_p_override is None:
             # Find coord_list_p for co-ordinates of tracks of layers that are parallel to bot_layer
             coord_list_p = [self.grid.track_to_coord(bot_layer, tidx) for tidx in warr.track_id]
         else:
-            coord_list_p = coord_list_p_override
+            coord_list_p = list(coord_list_p_override)
+        coord_list_p.sort()
 
         for _layer in range(bot_layer + 1, top_layer + 1):
             _dir = self.grid.get_direction(_layer)

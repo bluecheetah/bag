@@ -30,7 +30,7 @@ from pybag.enum import DesignOutput, LogLevel
 from pybag.core import FileLogger, gds_equal, PySchCellViewInfo
 
 from ..env import get_gds_layer_map, get_gds_object_map
-from ..io.file import read_yaml, write_yaml
+from ..io.file import read_yaml, write_yaml, is_valid_file
 from ..util.logging import LoggingBase
 from ..util.immutable import combine_hash
 from ..util.importlib import import_class
@@ -261,7 +261,8 @@ class DesignDB(LoggingBase):
             for dir_name in dir_list:
                 cur_dir = self._root_dir / dir_name
                 if filecmp.cmp(cdl_netlist, cur_dir / 'netlist.cdl', shallow=False):
-                    if (not gds_file) or gds_equal(gds_file, str(cur_dir / 'layout.gds')):
+                    if (not gds_file) or (is_valid_file(gds_file, None, 60, 1) and
+                                          gds_equal(gds_file, str(cur_dir / 'layout.gds'))):
                         self.log('Found existing design, reusing DUT netlist.')
                         dir_path = cur_dir
                         break

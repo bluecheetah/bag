@@ -319,6 +319,21 @@ netlist_map_default = {
                 'thermalnoise': [3, 'yes'],
             },
         },
+        'n8port': {
+            'lib_name': 'analogLib',
+            'cell_name': 'n8port',
+            'in_terms': [],
+            'io_terms': ['t1', 'b1', 't2', 'b2', 't3', 'b3', 't4', 'b4', 't5', 'b5', 't6', 'b6', 't7', 'b7',
+                         't8', 'b8'],
+            'is_prim': True,
+            'nets': [],
+            'out_terms': [],
+            'props': {
+                'dataFile': [3, ''],
+                'interp': [3, 'linear'],
+                'thermalnoise': [3, 'yes'],
+            },
+        },
         'port': {
             'lib_name': 'analogLib',
             'cell_name': 'port',
