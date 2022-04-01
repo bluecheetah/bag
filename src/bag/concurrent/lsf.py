@@ -68,7 +68,9 @@ class LSFSubProcessManager(SubProcessManager):
                                    args: Union[str, Sequence[str]],
                                    log: str,
                                    env: Optional[Dict[str, str]] = None,
-                                   cwd: Optional[str] = None) -> Optional[int]:
+                                   cwd: Optional[str] = None,
+                                   run_local: bool = False,
+                                   **kwargs: Any) -> Optional[int]:
         """A coroutine which starts a subprocess.
 
         If this coroutine is cancelled, it will shut down the subprocess gracefully using
@@ -84,12 +86,17 @@ class LSFSubProcessManager(SubProcessManager):
             an optional dictionary of environment variables.  None to inherit from parent.
         cwd : Optional[str]
             the working directory.  None to inherit from parent.
+        run_local : bool
+            True to run locally (not use LSF). False to use LSF. Default is False.
 
         Returns
         -------
         retcode : Optional[int]
             the return code of the subprocess.
         """
+        if run_local:
+            return await super().async_new_subprocess(args, log, env, cwd, **kwargs)
+
         if isinstance(args, str):
             args = [args]
 
@@ -103,7 +110,7 @@ class LSFSubProcessManager(SubProcessManager):
 
         main_cmd = " ".join(args)
 
-        cmd_args = ['bsub', '-K', '-oo', str(log_path)] + self._options + [f'"{main_cmd}"']
+        cmd_args = ['bsub', '-K', '-q', self._queue, '-o', str(log_path)] + self._options + [f'"{main_cmd}"']
         cmd = " ".join(cmd_args)
 
         async with self._semaphore:
@@ -121,7 +128,8 @@ class LSFSubProcessManager(SubProcessManager):
                     await self._kill_subprocess(proc)
                     raise err
 
-    async def async_new_subprocess_flow(self, proc_info_list: Sequence[FlowInfo]) -> Any:
+    async def async_new_subprocess_flow(self, proc_info_list: Sequence[FlowInfo], run_local: bool = False,
+                                        **kwargs: Any) -> Any:
         """A coroutine which runs a series of subprocesses.
 
         If this coroutine is cancelled, it will shut down the current subprocess gracefully using
@@ -144,6 +152,8 @@ class LSFSubProcessManager(SubProcessManager):
                 a function to validate if it is ok to execute the next process.  The output of the
                 last function is returned.  The first argument is the return code, the second
                 argument is the log file name.
+        run_local : bool
+            True to run locally (not use LSF). False to use LSF. Default is False.
 
         Returns
         -------
@@ -151,6 +161,9 @@ class LSFSubProcessManager(SubProcessManager):
             the return value of the last validate function.  None if validate function
             returns False.
         """
+        if run_local:
+            return await super().async_new_subprocess_flow(proc_info_list, **kwargs)
+
         num_proc = len(proc_info_list)
         if num_proc == 0:
             return None
@@ -169,7 +182,7 @@ class LSFSubProcessManager(SubProcessManager):
 
                 main_cmd = " ".join(args)
 
-                cmd_args = ['bsub', '-K', '-o', str(log_path), '-e', str(log_path)] + self._options + [f'"{main_cmd}"']
+                cmd_args = ['bsub', '-K', '-q', self._queue, '-o', str(log_path)] + self._options + [f'"{main_cmd}"']
                 cmd = " ".join(cmd_args)
 
                 proc, retcode = None, None

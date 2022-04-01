@@ -182,7 +182,8 @@ class SubProcessManager:
                                    args: Union[str, Sequence[str]],
                                    log: str,
                                    env: Optional[Dict[str, str]] = None,
-                                   cwd: Optional[str] = None) -> Optional[int]:
+                                   cwd: Optional[str] = None,
+                                   **kwargs: Any) -> Optional[int]:
         """A coroutine which starts a subprocess.
 
         If this coroutine is cancelled, it will shut down the subprocess gracefully using
@@ -230,8 +231,7 @@ class SubProcessManager:
                     await self._kill_subprocess(proc)
                     raise err
 
-    async def async_new_subprocess_flow(self,
-                                        proc_info_list: Sequence[FlowInfo]) -> Any:
+    async def async_new_subprocess_flow(self, proc_info_list: Sequence[FlowInfo], **kwargs: Any) -> Any:
         """A coroutine which runs a series of subprocesses.
 
         If this coroutine is cancelled, it will shut down the current subprocess gracefully using
