@@ -94,7 +94,7 @@ class Checker(abc.ABC):
     @abc.abstractmethod
     async def async_run_drc(self, lib_name: str, cell_name: str, lay_view: str = 'layout',
                             layout: str = '', params: Optional[Dict[str, Any]] = None,
-                            run_dir: Union[str, Path] = '') -> Tuple[bool, str]:
+                            run_dir: Union[str, Path] = '', **kwargs: Any) -> Tuple[bool, str]:
         """A coroutine for running DRC.
 
         Parameters
@@ -125,7 +125,7 @@ class Checker(abc.ABC):
     async def async_run_lvs(self, lib_name: str, cell_name: str, sch_view: str = 'schematic',
                             lay_view: str = 'layout', layout: str = '', netlist: str = '',
                             params: Optional[Dict[str, Any]] = None, run_rcx: bool = False,
-                            run_dir: Union[str, Path] = '') -> Tuple[bool, str]:
+                            run_dir: Union[str, Path] = '', **kwargs: Any) -> Tuple[bool, str]:
         """A coroutine for running LVS.
 
         Parameters
@@ -162,7 +162,7 @@ class Checker(abc.ABC):
     async def async_run_rcx(self, lib_name: str, cell_name: str, sch_view: str = 'schematic',
                             lay_view: str = 'layout', layout: str = '', netlist: str = '',
                             params: Optional[Dict[str, Any]] = None,
-                            run_dir: Union[str, Path] = '') -> Tuple[str, str]:
+                            run_dir: Union[str, Path] = '', **kwargs: Any) -> Tuple[str, str]:
         """A coroutine for running RCX.
 
         Parameters
@@ -194,7 +194,8 @@ class Checker(abc.ABC):
         return '', ''
 
     @abc.abstractmethod
-    async def async_run_lvl(self, gds_file: str, ref_file: str,  run_dir: Union[str, Path] = '') -> Tuple[bool, str]:
+    async def async_run_lvl(self, gds_file: str, ref_file: str,  run_dir: Union[str, Path] = '',
+                            **kwargs: Any) -> Tuple[bool, str]:
         """A coroutine for running LVL with two gds files.
 
         Parameters
@@ -216,9 +217,8 @@ class Checker(abc.ABC):
         return False, ''
 
     @abc.abstractmethod
-    async def async_export_layout(self, lib_name: str, cell_name: str, out_file: str,
-                                  view_name: str = 'layout',
-                                  params: Optional[Dict[str, Any]] = None) -> str:
+    async def async_export_layout(self, lib_name: str, cell_name: str, out_file: str, view_name: str = 'layout',
+                                  params: Optional[Dict[str, Any]] = None, **kwargs: Any) -> str:
         """A coroutine for exporting layout.
 
         Parameters
@@ -242,9 +242,8 @@ class Checker(abc.ABC):
         return ''
 
     @abc.abstractmethod
-    async def async_export_schematic(self, lib_name: str, cell_name: str, out_file: str,
-                                     view_name: str = 'schematic',
-                                     params: Optional[Dict[str, Any]] = None) -> str:
+    async def async_export_schematic(self, lib_name: str, cell_name: str, out_file: str, view_name: str = 'schematic',
+                                     params: Optional[Dict[str, Any]] = None, **kwargs: Any) -> str:
         """A coroutine for exporting schematic.
 
         Parameters
@@ -541,45 +540,49 @@ class SubProcessChecker(Checker, abc.ABC):
 
     async def async_run_drc(self, lib_name: str, cell_name: str, lay_view: str = 'layout',
                             layout: str = '', params: Optional[Dict[str, Any]] = None,
-                            run_dir: Union[str, Path] = '') -> Tuple[bool, str]:
+                            run_dir: Union[str, Path] = '', subproc_options: Optional[Dict[str, Any]] = None,
+                            **kwargs: Any) -> Tuple[bool, str]:
         flow_info = self.setup_drc_flow(lib_name, cell_name, lay_view, layout, params, run_dir)
-        return await self._manager.async_new_subprocess_flow(flow_info)
+        return await self._manager.async_new_subprocess_flow(flow_info, **(subproc_options or {}))
 
     async def async_run_lvs(self, lib_name: str, cell_name: str, sch_view: str = 'schematic',
                             lay_view: str = 'layout', layout: str = '', netlist: str = '',
                             params: Optional[Dict[str, Any]] = None, run_rcx: bool = False,
-                            run_dir: Union[str, Path] = '') -> Tuple[bool, str]:
+                            run_dir: Union[str, Path] = '', subproc_options: Optional[Dict[str, Any]] = None,
+                            **kwargs: Any) -> Tuple[bool, str]:
         flow_info = self.setup_lvs_flow(lib_name, cell_name, sch_view, lay_view, layout,
                                         netlist, params, run_rcx, run_dir)
-        return await self._manager.async_new_subprocess_flow(flow_info)
+        return await self._manager.async_new_subprocess_flow(flow_info, **(subproc_options or {}))
 
     async def async_run_rcx(self, lib_name: str, cell_name: str, sch_view: str = 'schematic',
                             lay_view: str = 'layout', layout: str = '', netlist: str = '',
                             params: Optional[Dict[str, Any]] = None,
-                            run_dir: Union[str, Path] = '') -> Tuple[str, str]:
+                            run_dir: Union[str, Path] = '', subproc_options: Optional[Dict[str, Any]] = None,
+                            **kwargs: Any) -> Tuple[str, str]:
         flow_info = self.setup_rcx_flow(lib_name, cell_name, sch_view, lay_view, layout,
                                         netlist, params, run_dir)
-        return await self._manager.async_new_subprocess_flow(flow_info)
+        return await self._manager.async_new_subprocess_flow(flow_info, **(subproc_options or {}))
 
-    async def async_run_lvl(self, gds_file: str, ref_file: str, run_dir: Union[str, Path] = '') -> Tuple[bool, str]:
+    async def async_run_lvl(self, gds_file: str, ref_file: str, run_dir: Union[str, Path] = '',
+                            subproc_options: Optional[Dict[str, Any]] = None, **kwargs: Any) -> Tuple[bool, str]:
         flow_info = self.setup_lvl_flow(gds_file, ref_file, run_dir)
         if flow_info:
-            return await self._manager.async_new_subprocess_flow(flow_info)
+            return await self._manager.async_new_subprocess_flow(flow_info, **(subproc_options or {}))
         else:
             return gds_equal(gds_file, ref_file), ''
 
-    async def async_export_layout(self, lib_name: str, cell_name: str,
-                                  out_file: str, view_name: str = 'layout',
-                                  params: Optional[Dict[str, Any]] = None) -> str:
+    async def async_export_layout(self, lib_name: str, cell_name: str, out_file: str, view_name: str = 'layout',
+                                  params: Optional[Dict[str, Any]] = None,
+                                  subproc_options: Optional[Dict[str, Any]] = None, **kwargs: Any) -> str:
         proc_info = self.setup_export_layout(lib_name, cell_name, out_file, view_name, params)
-        await self._manager.async_new_subprocess(*proc_info)
+        await self._manager.async_new_subprocess(*proc_info, **(subproc_options or {}))
         return proc_info[1]
 
-    async def async_export_schematic(self, lib_name: str, cell_name: str,
-                                     out_file: str, view_name: str = 'schematic',
-                                     params: Optional[Dict[str, Any]] = None) -> str:
+    async def async_export_schematic(self, lib_name: str, cell_name: str, out_file: str, view_name: str = 'schematic',
+                                     params: Optional[Dict[str, Any]] = None,
+                                     subproc_options: Optional[Dict[str, Any]] = None, **kwargs: Any) -> str:
         proc_info = self.setup_export_schematic(lib_name, cell_name, out_file, view_name, params)
-        await self._manager.async_new_subprocess(*proc_info)
+        await self._manager.async_new_subprocess(*proc_info, **(subproc_options or {}))
         return proc_info[1]
 
 
