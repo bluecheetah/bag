@@ -103,7 +103,7 @@ class LSFSubProcessManager(SubProcessManager):
 
         main_cmd = " ".join(args)
 
-        cmd_args = ['bsub', '-K', '-oo', str(log_path)] + self._options + [f'"{main_cmd}"']
+        cmd_args = ['bsub', '-K', '-q', self._queue, '-o', str(log_path)] + self._options + [f'"{main_cmd}"']
         cmd = " ".join(cmd_args)
 
         async with self._semaphore:
@@ -169,7 +169,7 @@ class LSFSubProcessManager(SubProcessManager):
 
                 main_cmd = " ".join(args)
 
-                cmd_args = ['bsub', '-K', '-o', str(log_path), '-e', str(log_path)] + self._options + [f'"{main_cmd}"']
+                cmd_args = ['bsub', '-K', '-q', self._queue, '-o', str(log_path)] + self._options + [f'"{main_cmd}"']
                 cmd = " ".join(cmd_args)
 
                 proc, retcode = None, None
