@@ -23,7 +23,6 @@ import re
 import shutil
 import time
 from pathlib import Path
-from itertools import chain
 
 from pybag.enum import DesignOutput
 from pybag.core import get_cdba_name_bits
@@ -39,6 +38,16 @@ from .data import (
 )
 from .base import SimProcessManager, get_corner_temp
 from .hdf5 import load_sim_data_hdf5, save_sim_data_hdf5
+
+# The use of pysrr to parse simulation data requires an external Python package.
+# Since this import is only required when pysrr is used, it is treated as an optional import
+try:
+    from .srr import srr_to_sim_data
+except ModuleNotFoundError as e:
+    srr_to_sim_data = None  # assume pysrr is not needed, error later if assumption is false
+    srr_import_err = e
+else:
+    srr_import_err = None
 
 if TYPE_CHECKING:
     from .data import SweepInfo
@@ -60,6 +69,7 @@ class SpectreInterface(SimProcessManager):
     def __init__(self, tmp_dir: str, sim_config: Dict[str, Any]) -> None:
         SimProcessManager.__init__(self, tmp_dir, sim_config)
         self._model_setup: Dict[str, List[Tuple[str, str]]] = read_yaml(sim_config['env_file'])
+        self._use_pysrr: bool = sim_config.get('use_pysrr', False)
 
     @property
     def netlist_type(self) -> DesignOutput:
@@ -245,8 +255,12 @@ class SpectreInterface(SimProcessManager):
         raw_path: Path = cwd_path / f'{sim_tag}.raw'
         hdf5_path: Path = cwd_path / f'{sim_tag}.hdf5'
 
-        if raw_path.is_dir():
-            shutil.rmtree(raw_path)
+        try:
+            if raw_path.is_dir():
+                shutil.rmtree(str(raw_path))
+        except FileNotFoundError:  # Ignore errors from race conditions
+            pass
+
         if hdf5_path.is_file():
             hdf5_path.unlink()
 
@@ -309,13 +323,20 @@ class SpectreInterface(SimProcessManager):
         comp_str = '1' if compress else '0'
         rtol_str = f'{rtol:.4g}'
         atol_str = f'{atol:.4g}'
-        sim_cmd = ['srr_to_hdf5', str(raw_path), str(hdf5_path), comp_str, rtol_str, atol_str]
-        ret_code = await self.manager.async_new_subprocess(sim_cmd, str(log_path),
-                                                           cwd=str(cwd_path))
-        if ret_code is None or ret_code != 0:
-            raise ValueError(f'srr_to_hdf5 ended with error.  See log file: {log_path}')
-        if not is_valid_file(hdf5_path, None, 120, 1):
-            raise ValueError(f'srr_to_hdf5 ended with error.  See log file: {log_path}')
+
+        if self._use_pysrr:
+            if srr_to_sim_data is None:  # re-raise error from loading pysrr
+                raise srr_import_err
+            sim_data = srr_to_sim_data(raw_path, rtol, atol)
+            save_sim_data_hdf5(sim_data, hdf5_path, compress)
+        else:
+            sim_cmd = ['srr_to_hdf5', str(raw_path), str(hdf5_path), comp_str, rtol_str, atol_str]
+            ret_code = await self.manager.async_new_subprocess(sim_cmd, str(log_path),
+                                                               cwd=str(cwd_path))
+            if ret_code is None or ret_code != 0:
+                raise ValueError(f'srr_to_hdf5 ended with error.  See log file: {log_path}')
+            if not is_valid_file(hdf5_path, None, 120, 1):
+                raise ValueError(f'srr_to_hdf5 ended with error.  See log file: {log_path}')
 
         # post-process HDF5 to convert to MD array
         _process_hdf5(hdf5_path, rtol, atol)
