@@ -118,7 +118,7 @@ def srr_dataset_to_analysis_data(ds: pysrrDataSet, rtol: float, atol: float) -> 
             sig_y_reshaped = np.reshape(sig_y, data_shape)
         except ValueError as e:  # Missing some data so reshaping fails
             raise SRRDatabaseNotReady(str(e))
-        data[sig_name] = sig_y_reshaped
+        data[sig_name.replace('/', '.')] = sig_y_reshaped
     return AnalysisData(['corner'] + new_swp_vars, data, is_md)
 
 
