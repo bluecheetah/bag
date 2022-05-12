@@ -352,7 +352,7 @@ class DesignDB(LoggingBase):
         dir_path.mkdir(parents=True, exist_ok=True)
 
         shutil.move(cdl_netlist, str(dir_path / 'netlist.cdl'))
-        if is_valid_file(gds_file, None, 60, 1):
+        if gds_file:
             shutil.move(gds_file, str(dir_path / 'layout.gds'))
         return dir_path
 
