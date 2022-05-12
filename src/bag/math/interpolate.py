@@ -44,7 +44,8 @@
 """This module defines various interpolation classes.
 """
 
-from typing import List, Tuple, Union, Sequence
+from __future__ import annotations
+from typing import List, Tuple, Union, Sequence, Optional
 
 import numpy as np
 import scipy.interpolate as interp
@@ -56,11 +57,8 @@ __author__ = 'erichang'
 __all__ = ['interpolate_grid', 'LinearInterpolator']
 
 
-def _scales_to_points(scale_list,  # type: List[Tuple[float, float]]
-                      values,  # type: np.multiarray.ndarray
-                      delta=1e-4,  # type: float
-                      ):
-    # type: (...) -> Tuple[List[np.multiarray.ndarray], List[float]]
+def _scales_to_points(scale_list: List[Tuple[float, float]], values: np.ndarray,
+                      delta: float = 1e-4) -> Tuple[List[np.ndarray], List[float]]:
     """convert scale_list to list of point values and finite difference deltas."""
 
     ndim = len(values.shape)
@@ -83,14 +81,8 @@ def _scales_to_points(scale_list,  # type: List[Tuple[float, float]]
     return points, delta_list
 
 
-def interpolate_grid(scale_list,  # type: List[Tuple[float, float]]
-                     values,  # type: np.multiarray.ndarray
-                     method='spline',  # type: str
-                     extrapolate=False,  # type: bool
-                     delta=1e-4,  # type: float
-                     num_extrapolate=3,  # type: int
-                     ):
-    # type: (...) -> DiffFunction
+def interpolate_grid(scale_list: List[Tuple[float, float]], values: np.ndarray, method: str = 'spline',
+                     extrapolate: bool = False, delta: float = 1e-4, num_extrapolate: int = 3) -> DiffFunction:
     """Interpolates multidimensional data on a regular grid.
 
     returns an Interpolator for the given dataset.
@@ -99,7 +91,7 @@ def interpolate_grid(scale_list,  # type: List[Tuple[float, float]]
     ----------
     scale_list : List[Tuple[float, float]]
         a list of (offset, spacing).
-    values : np.multiarray.ndarray
+    values : np.ndarray
         The output data in N dimensions.  The length in each dimension must
         be at least 2.
     method : str
@@ -137,6 +129,41 @@ def interpolate_grid(scale_list,  # type: List[Tuple[float, float]]
         raise ValueError('Unsupported interpolation method: %s' % method)
 
 
+def interpolate_unstructured(points: List[np.ndarray], values: np.ndarray, method: str = 'spline',
+                             extrapolate: bool = False) -> DiffFunction:
+    """Interpolates multidimensional data on an unstructured data/irregular grid.
+
+    returns an Interpolator for the given dataset.
+
+    Parameters
+    ----------
+    points : List[np.ndarray]
+        a list of points of each dimension.
+    values : np.ndarray
+        The output data in N dimensions. The length in each dimension must
+        be at least 2.
+    method : str
+        The interpolation method.  Either 'linear', or 'spline'.
+        Defaults to 'spline'.
+    extrapolate : bool
+        True to extrapolate data output of given bounds.  Defaults to False.
+
+    Returns
+    -------
+    fun : DiffFunction
+        the interpolator function.
+    """
+    ndim = len(values.shape)
+    if method == 'linear':
+        return LinearInterpolatorUnstructured(points, values, None, extrapolate=extrapolate)
+    elif ndim == 1:
+        return Interpolator1DUnstructured(points, values, method=method, extrapolate=extrapolate)
+    elif method == 'spline':
+        raise ValueError("Unsupported spline interpolation for unstructured multi-dimensional data")
+    else:
+        raise ValueError('Unsupported interpolation method: %s' % method)
+
+
 class LinearInterpolator(DiffFunction):
     """A linear interpolator on a regular grid for arbitrary dimensions.
 
@@ -145,9 +172,9 @@ class LinearInterpolator(DiffFunction):
 
     Parameters
     ----------
-    points : Sequence[np.multiarray.ndarray]
+    points : Sequence[np.ndarray]
         list of points of each dimension.
-    values : np.multiarray.ndarray
+    values : np.ndarray
         The output data in N dimensions.
     delta_list : List[float]
         list of finite difference step size for each axis.
@@ -155,8 +182,8 @@ class LinearInterpolator(DiffFunction):
         True to extrapolate data output of given bounds.  Defaults to False.
     """
 
-    def __init__(self, points, values, delta_list, extrapolate=False):
-        # type: (Sequence[np.multiarray.ndarray], np.multiarray.ndarray, List[float], bool) -> None
+    def __init__(self, points: Sequence[np.ndarray], values: np.ndarray, delta_list: List[float],
+                 extrapolate: bool = False) -> None:
         input_range = [(pvec[0], pvec[-1]) for pvec in points]
         DiffFunction.__init__(self, input_range, delta_list=delta_list)
         self._points = points
@@ -165,22 +192,21 @@ class LinearInterpolator(DiffFunction):
                                                   bounds_error=not extrapolate,
                                                   fill_value=None)
 
-    def get_input_points(self, idx):
-        # type: (int) -> np.multiarray.ndarray
+    def get_input_points(self, idx: int) -> np.ndarray:
         """Returns the input points for the given dimension."""
         return self._points[idx]
 
-    def __call__(self, xi):
+    def __call__(self, xi: np.ndarray) -> np.ndarray:
         """Interpolate at the given coordinate.
 
         Parameters
         ----------
-        xi : numpy.array
+        xi : numpy.ndarray
             The coordinates to evaluate, with shape (..., ndim)
 
         Returns
         -------
-        val : numpy.array
+        val : numpy.ndarray
             The interpolated values at the given coordinates.
         """
         ans = self.fun(xi)
@@ -188,8 +214,8 @@ class LinearInterpolator(DiffFunction):
             return ans[0]
         return ans
 
-    def integrate(self, xstart, xstop, axis=-1, logx=False, logy=False, raw=False):
-        # type: (float, float, int, bool, bool, bool) -> Union[LinearInterpolator, np.ndarray]
+    def integrate(self, xstart: float, xstop: float, axis: int = -1,
+                  logx: bool = False, logy: bool = False, raw: bool = False) -> Union[LinearInterpolator, np.ndarray]:
         """Integrate away the given axis.
 
         if logx/logy is True, that means this LinearInterpolator is actually used
@@ -304,7 +330,7 @@ class LinearInterpolator(DiffFunction):
             x2 = np.exp(lx2[log_idxb])
             x1 = x1[log_idxb]
             area[log_idxb] = y1[log_idxb] / mp1 * (np.power(x2 / x1, m[log_idxb]) * x2 - x1)
-            new_values = np.sum(area, axis=-1)  # type: np.multiarray.ndarray
+            new_values = np.sum(area, axis=-1)
         else:
             # just use trapezoid integration
             # noinspection PyTypeChecker
@@ -317,6 +343,54 @@ class LinearInterpolator(DiffFunction):
             return new_values
 
 
+class LinearInterpolatorUnstructured(DiffFunction):
+    """A linear interpolator on an unstructured dataset/irregular grid for arbitrary dimensions.
+
+    This class is backed by scipy.interpolate.LinearNDInterpolator.
+    Derivatives are calculated using finite difference.
+
+    Parameters
+    ----------
+    points : Sequence[np.ndarray]
+        list of points of each dimension.
+    values : np.ndarray
+        The output data in N dimensions.
+    delta_list : List[float]
+        list of finite difference step size for each axis.
+    extrapolate : bool
+        True to extrapolate data output of given bounds.  Defaults to False.
+    rescale : bool
+        True to rescale points to unit cube before performing interpolation. Defaults to False
+        Refer to scipy.interpolate.LinearNDInterpolator for details.
+    """
+
+    def __init__(self, points: Sequence[np.ndarray], values: np.ndarray, delta_list: Optional[List[float]],
+                 extrapolate: bool = False, rescale: bool = False):
+        input_range = [(pvec[0], pvec[-1]) for pvec in points]
+        super().__init__(input_range, delta_list=delta_list)
+        self._points = points
+        self._extrapolate = extrapolate  # TODO: implement extrapolate
+        self.fun = interp.LinearNDInterpolator(points, values, rescale=rescale)
+
+    def __call__(self, xi: np.ndarray) -> np.ndarray:
+        """Interpolate at the given coordinate.
+
+        Parameters
+        ----------
+        xi : numpy.ndarray
+            The coordinates to evaluate, with shape (..., ndim)
+
+        Returns
+        -------
+        val : numpy.ndarray
+            The interpolated values at the given coordinates.
+        """
+        ans = self.fun(xi)
+        if ans.size == 1:
+            return ans[0]
+        return ans
+
+
 class Interpolator1D(DiffFunction):
     """An interpolator on a regular grid for 1 dimensional data.
 
@@ -324,9 +398,9 @@ class Interpolator1D(DiffFunction):
 
     Parameters
     ----------
-    scale_list : list[(float, float)]
+    scale_list : List[Tuple[float, float]]
         a list of (offset, spacing) for each input dimension.
-    values : numpy.array
+    values : numpy.ndarray
         The output data.  Must be 1 dimension.
     method : str
         extrapolation method.  Either 'linear' or 'spline'.  Defaults to spline.
@@ -334,7 +408,8 @@ class Interpolator1D(DiffFunction):
         True to extrapolate data output of given bounds.  Defaults to False.
     """
 
-    def __init__(self, scale_list, values, method='spline', extrapolate=False):
+    def __init__(self, scale_list: List[Tuple[float, float]], values: numpy.ndarray, method: str = 'spline',
+                 extrapolate: bool = False):
         # error checking
         if len(values.shape) != 1:
             raise ValueError('This class only works for 1D data.')
@@ -346,29 +421,28 @@ class Interpolator1D(DiffFunction):
         elif method == 'spline':
             k = 3
         else:
-            raise ValueError('Unsuppoorted interpolation method: %s' % method)
+            raise ValueError('Unsupported interpolation method: %s' % method)
 
         offset, scale = scale_list[0]
         num_pts = values.shape[0]
-        points = np.linspace(offset, (num_pts - 1) * scale + offset,
-                             num_pts)  # type: np.multiarray.ndarray
+        points = np.linspace(offset, (num_pts - 1) * scale + offset, num_pts)
 
         DiffFunction.__init__(self, [(points[0], points[-1])], delta_list=None)
 
         ext = 0 if extrapolate else 2
         self.fun = interp.InterpolatedUnivariateSpline(points, values, k=k, ext=ext)
 
-    def __call__(self, xi):
+    def __call__(self, xi: np.ndarray) -> np.ndarray:
         """Interpolate at the given coordinate.
 
         Parameters
         ----------
-        xi : numpy.array
+        xi : numpy.ndarray
             The coordinates to evaluate, with shape (..., ndim)
 
         Returns
         -------
-        val : numpy.array
+        val : numpy.ndarray
             The interpolated values at the given coordinates.
         """
         ans = self.fun(xi)
@@ -376,19 +450,99 @@ class Interpolator1D(DiffFunction):
             return ans.item()
         return ans
 
-    def deriv(self, xi, idx):
+    def deriv(self, xi: np.ndarray, idx: int) -> np.ndarray:
         """Calculate the derivative of the spline along the given index.
 
         Parameters
         ----------
-        xi : numpy.array
+        xi : numpy.ndarray
             The coordinates to evaluate, with shape (..., ndim)
         idx : int
             The index to calculate the derivative on.
 
         Returns
         -------
-        val : numpy.array
+        val : numpy.ndarray
+            The derivatives at the given coordinates.
+        """
+        if idx != 0:
+            raise ValueError('Invalid derivative index: %d' % idx)
+
+        ans = self.fun(xi, 1)
+        if ans.size == 1:
+            return ans[0]
+        return ans
+
+
+class Interpolator1DUnstructured(DiffFunction):
+    """An interpolator on an unstructured dataset/irregular grid for 1 dimensional data.
+
+    This class is backed by scipy.interpolate.InterpolatedUnivariateSpline.
+
+    Parameters
+    ----------
+    points : Sequence[np.ndarray]
+        list of points of each dimension. Must have length 1.
+    values : numpy.ndarray
+        The output data.  Must be 1 dimension.
+    method : str
+        extrapolation method.  Either 'linear' or 'spline'.  Defaults to spline.
+    extrapolate : bool
+        True to extrapolate data output of given bounds.  Defaults to False.
+    """
+
+    def __init__(self, points: Sequence[np.ndarray], values: np.ndarray, method: str = 'spline',
+                 extrapolate: bool = False):
+        if len(values.shape) != 1:
+            raise ValueError('This class only works for 1D data.')
+        elif len(points) != 1:
+            raise ValueError('input and output dimension mismatch.')
+
+        if method == 'linear':
+            k = 1
+        elif method == 'spline':
+            k = 3
+        else:
+            raise ValueError('Unsupported interpolation method: %s' % method)
+
+        points = points[0]
+
+        super().__init__([(points[0], points[-1])], delta_list=None)
+
+        ext = 0 if extrapolate else 2
+        self.fun = interp.InterpolatedUnivariateSpline(points, values, k=k, ext=ext)
+
+    def __call__(self, xi: np.ndarray) -> np.ndarray:
+        """Interpolate at the given coordinate.
+
+        Parameters
+        ----------
+        xi : numpy.ndarray
+            The coordinates to evaluate, with shape (..., ndim)
+
+        Returns
+        -------
+        val : numpy.ndarray
+            The interpolated values at the given coordinates.
+        """
+        ans = self.fun(xi)
+        if ans.size == 1:
+            return ans.item()
+        return ans
+
+    def deriv(self, xi: np.ndarray, idx: int) -> np.ndarray:
+        """Calculate the derivative of the spline along the given index.
+
+        Parameters
+        ----------
+        xi : numpy.ndarray
+            The coordinates to evaluate, with shape (..., ndim)
+        idx : int
+            The index to calculate the derivative on.
+
+        Returns
+        -------
+        val : numpy.ndarray
             The derivatives at the given coordinates.
         """
         if idx != 0:
@@ -407,15 +561,15 @@ class Spline2D(DiffFunction):
 
     Parameters
     ----------
-    scale_list : list[(float, float)]
+    scale_list : List[Tuple[float, float]]
         a list of (offset, spacing) for each input dimension.
-    values : numpy.array
+    values : numpy.ndarray
         The output data.  Must be 2D.
     extrapolate : bool
         True to extrapolate data output of given bounds.  Defaults to False.
     """
 
-    def __init__(self, scale_list, values, extrapolate=False):
+    def __init__(self, scale_list: List[Tuple[float, float]], values: np.ndarray, extrapolate: bool = False):
         # error checking
         if len(values.shape) != 2:
             raise ValueError('This class only works for 2D data.')
@@ -424,9 +578,9 @@ class Spline2D(DiffFunction):
 
         nx, ny = values.shape
         offset, scale = scale_list[0]
-        x = np.linspace(offset, (nx - 1) * scale + offset, nx)  # type: np.multiarray.ndarray
+        x = np.linspace(offset, (nx - 1) * scale + offset, nx)
         offset, scale = scale_list[1]
-        y = np.linspace(offset, (ny - 1) * scale + offset, ny)  # type: np.multiarray.ndarray
+        y = np.linspace(offset, (ny - 1) * scale + offset, ny)
 
         self._min = x[0], y[0]
         self._max = x[-1], y[-1]
@@ -436,7 +590,7 @@ class Spline2D(DiffFunction):
         self.fun = interp.RectBivariateSpline(x, y, values)
         self._extrapolate = extrapolate
 
-    def _get_xy(self, xi):
+    def _get_xy(self, xi: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Get X and Y array from given coordinates."""
         xi = np.asarray(xi, dtype=float)
         if xi.shape[-1] != 2:
@@ -444,43 +598,43 @@ class Spline2D(DiffFunction):
                              "but this interpolator has dimension 2" % (xi.shape[-1]))
 
         # check input within bounds.
-        x = xi[..., 0]  # type: np.multiarray.ndarray
-        y = xi[..., 1]  # type: np.multiarray.ndarray
+        x = xi[..., 0]
+        y = xi[..., 1]
         if not self._extrapolate and not np.all((self._min[0] <= x) & (x <= self._max[0]) &
                                                 (self._min[1] <= y) & (y <= self._max[1])):
             raise ValueError('some inputs are out of bounds.')
 
         return x, y
 
-    def __call__(self, xi):
+    def __call__(self, xi: np.ndarray) -> np.ndarray:
         """Interpolate at the given coordinates.
 
         Parameters
         ----------
-        xi : numpy.array
+        xi : numpy.ndarray
             The coordinates to evaluate, with shape (..., ndim)
 
         Returns
         -------
-        val : numpy.array
+        val : numpy.ndarray
             The interpolated values at the given coordinates.
         """
         x, y = self._get_xy(xi)
         return self.fun(x, y, grid=False)
 
-    def deriv(self, xi, idx):
+    def deriv(self, xi: np.ndarray, idx: int) -> np.ndarray:
         """Calculate the derivative of the spline along the given index.
 
         Parameters
         ----------
-        xi : numpy.array
+        xi : numpy.ndarray
             The coordinates to evaluate, with shape (..., ndim)
         idx : int
             The index to calculate the derivative on.
 
         Returns
         -------
-        val : numpy.array
+        val : numpy.ndarray
             The derivatives at the given coordinates.
         """
         if idx < 0 or idx > 1:
@@ -510,9 +664,9 @@ class MapCoordinateSpline(DiffFunction):
 
     Parameters
     ----------
-    scale_list : list[(float, float)]
+    scale_list : List[Tuple[float, float]]
         a list of (offset, spacing) for each input dimension.
-    values : numpy.array
+    values : numpy.ndarray
         The output data.
     extrapolate : bool
         True to linearly extrapolate outside of bounds.
@@ -522,8 +676,8 @@ class MapCoordinateSpline(DiffFunction):
         the finite difference step size.  Defaults to 1e-4 (relative to a spacing of 1).
     """
 
-    def __init__(self, scale_list, values, extrapolate=False, num_extrapolate=3,
-                 delta=1e-4):
+    def __init__(self, scale_list: List[Tuple[float, float]], values: np.ndarray, extrapolate: bool = False,
+                 num_extrapolate: int = 3, delta: float = 1e-4):
         shape = values.shape
         ndim = len(shape)
 
@@ -552,7 +706,7 @@ class MapCoordinateSpline(DiffFunction):
 
         DiffFunction.__init__(self, input_ranges, delta_list=delta_list)
 
-    def _normalize_inputs(self, xi):
+    def _normalize_inputs(self, xi: np.ndarray) -> np.ndarray:
         """Normalize the inputs."""
         xi = np.asarray(xi, dtype=float)
         if xi.shape[-1] != self.ndim:
@@ -569,17 +723,17 @@ class MapCoordinateSpline(DiffFunction):
 
         return xi
 
-    def __call__(self, xi):
+    def __call__(self, xi: np.ndarray) -> np.ndarray:
         """Interpolate at the given coordinate.
 
         Parameters
         ----------
-        xi : numpy.array
+        xi : numpy.ndarray
             The coordinates to evaluate, with shape (..., ndim)
 
         Returns
         -------
-        val : numpy.array
+        val : numpy.ndarray
             The interpolated values at the given coordinates.
         """
         ext = self._ext
