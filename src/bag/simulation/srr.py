@@ -44,6 +44,14 @@ from .data import AnalysisData, SimData, _check_is_md
 from srr_python.pysrr import pysrrDataBase, pysrrDataSet
 
 
+# The following SRR analysis types are mapped to different analysis type names for SimData
+_ANA_TYPE_MAP = {
+    'td.pss': 'pss_td',
+    'fd.pss': 'pss_fd',
+    'timedomain.pnoise': 'pnoise',
+}
+
+
 # Some custom exception classes for SRR database parsing
 class SRRtoSimDataError(Exception):
     pass
@@ -138,7 +146,11 @@ def get_sim_env(ds: pysrrDataSet) -> str:
 
     ds_name = ds._name
     ana_type = ds.getAnalysisType()
-    matched = re.search(rf'__+{ana_type}__+(.+)__+.*', ds_name)
+    if ana_type.endswith(('.pss', '.pnoise')):
+        ana_type_end = ana_type.split('.')[-1]
+        matched = re.search(rf'__+{ana_type_end}__+(.+)__+.*-{ana_type}', ds_name)
+    else:
+        matched = re.search(rf'__+{ana_type}__+(.+)__+.*', ds_name)
     if not matched:
         raise ValueError(f"Unmatched dataset name {ds_name} of analysis type {ana_type}")
     return matched.group(1)
@@ -239,7 +251,7 @@ def srr_to_sim_data(srr_path: Union[str, Path], rtol: float, atol: float) -> Sim
         db = pysrrDataBase(srr_path)
         if not db.isValid():
             raise ValueError(f"SRR database {srr_path} is invalid")
-        ds_names = db.dataSetNameList()
+        ds_names = sorted(db.dataSetNameList())
         ana_dict = {}
         sim_netlist_type = DesignOutput[db.getAttribute('simulator').upper()]
         try:
@@ -248,7 +260,7 @@ def srr_to_sim_data(srr_path: Union[str, Path], rtol: float, atol: float) -> Sim
             for name in ds_names:
                 ds = db.getDataSet(name)
                 ana_type = ds.getAnalysisType()
-
+                ana_type = _ANA_TYPE_MAP.get(ana_type, ana_type)
                 cur_ana = srr_dataset_to_analysis_data(ds, rtol, atol)
                 sim_env = get_sim_env(ds)
                 if ana_type not in ana_dict:
