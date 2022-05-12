@@ -140,7 +140,8 @@ def readlines_iter(fname: Union[str, Path]) -> Iterable[str]:
             yield line
 
 
-def is_valid_file(fname: Union[str, Path], ready_str: Optional[str], timeout: float, wait_intvl: float) -> bool:
+def is_valid_file(fname: Union[str, Path], ready_str: Optional[str], timeout: float, wait_intvl: float,
+                  check_nonempty: bool = False) -> bool:
     """Checks if given file is valid by seeing if it exists and optionally contains a string.
 
     Parameters
@@ -148,11 +149,13 @@ def is_valid_file(fname: Union[str, Path], ready_str: Optional[str], timeout: fl
     fname : Union[str, Path]
         the file name.
     ready_str : Optional[str]
-        the string to check if file is ready. None if we should only check to see if file exists
+        the string to check if file is ready. None if we should only check to see if file exists.
     timeout : float
-        Maximum amount of time to wait.
-    wait_intvl: float
-        Amount of time in between iterations to check if file is ready
+        maximum amount of time to wait.
+    wait_intvl : float
+        amount of time in between iterations to check if file is ready.
+    check_nonempty : bool
+        True to check if file is not empty. Default is False.
 
     Returns
     -------
@@ -167,6 +170,13 @@ def is_valid_file(fname: Union[str, Path], ready_str: Optional[str], timeout: fl
             return False
         time.sleep(wait_intvl)
         iter_cnt += 1
+
+    if check_nonempty:
+        while fname.stat().st_size == 0:
+            if iter_cnt > max_iter:
+                return False
+            time.sleep(wait_intvl)
+            iter_cnt += 1
 
     if ready_str is None:
         return True

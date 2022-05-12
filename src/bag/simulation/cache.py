@@ -23,6 +23,7 @@ from typing import (
 
 import shutil
 import filecmp
+import tempfile
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -201,13 +202,17 @@ class DesignDB(LoggingBase):
         exact_cell_names = {impl_cell}
 
         obj_cls = import_class(dut_cls)
+
+        # Create DUT layout and netlist in unique temporary directory to prevent overwriting of files
+        # during concurrent DUT creation
+        tmp_dir = Path(tempfile.mkdtemp('', 'tmp_', dir=self._root_dir))
         if issubclass(obj_cls, TemplateBase):
             self.log(f'Creating layout: {obj_cls.__name__}')
             lay_master = self._lay_db.new_template(obj_cls, params=dut_params)
             sch_params = lay_master.sch_params
             sch_cls = lay_master.get_schematic_class_inst()
             layout_hash = hash(lay_master.key)
-            gds_file = str(self._root_dir / 'tmp.gds')
+            gds_file = str(tmp_dir / 'tmp.gds')
             if export_lay:
                 self._lay_db.batch_layout([(lay_master, impl_cell)], output=DesignOutput.LAYOUT,
                                           name_prefix=name_prefix, name_suffix=name_suffix,
@@ -218,6 +223,7 @@ class DesignDB(LoggingBase):
                                           fname=gds_file, name_prefix=name_prefix,
                                           name_suffix=name_suffix,
                                           exact_cell_names=exact_cell_names)
+            assert is_valid_file(gds_file, None, 60, 1, True)
         else:
             if extract:
                 raise ValueError('Cannot run extraction without layout.')
@@ -235,7 +241,7 @@ class DesignDB(LoggingBase):
         sch_master: Module = self._sch_db.new_master(sch_cls, params=sch_params)
 
         # create schematic netlist
-        cdl_netlist = str(self._root_dir / 'tmp.cdl')
+        cdl_netlist = str(tmp_dir / 'tmp.cdl')
         cv_info_out = []
         sch_dut_list = [(sch_master, impl_cell)]
         self._sch_db.batch_schematic(sch_dut_list, output=DesignOutput.CDL,
@@ -246,6 +252,8 @@ class DesignDB(LoggingBase):
             self._sch_db.batch_schematic(sch_dut_list,
                                          name_prefix=name_prefix, name_suffix=name_suffix,
                                          exact_cell_names=exact_cell_names)
+
+        assert is_valid_file(cdl_netlist, None, 60, 1, True)
 
         self.log('Check for existing netlist')
         hash_id = combine_hash(layout_hash, hash(sch_master.key))
@@ -271,6 +279,7 @@ class DesignDB(LoggingBase):
                 dir_path = self._generate_cell(impl_cell, cdl_netlist, gds_file)
                 dir_list.append(dir_path.name)
                 write_yaml(self._info_file, self._info_specs)
+            shutil.rmtree(tmp_dir)  # Remove temporary directory
 
         if extract or (extract is None and self._extract):
             ans = dir_path / 'rcx.sp'
