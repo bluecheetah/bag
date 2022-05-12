@@ -2737,7 +2737,7 @@ class TemplateBase(DesignMaster):
                           mlm_dict: Optional[Mapping[int, MinLenMode]] = None,
                           ret_warr_dict: Optional[Mapping[int, WireArray]] = None,
                           coord_list_p_override: Optional[Sequence[int]] = None,
-                          coord_list_o_override: Optional[Sequence[int]] = None) -> WireArray:
+                          coord_list_o_override: Optional[Sequence[int]] = None, alternate_o: bool = False) -> WireArray:
         """Helper method to draw via stack and connections upto top layer, assuming connections can be on grid.
         Should work regardless of direction of top layer and bot layer.
 
@@ -2768,6 +2768,10 @@ class TemplateBase(DesignMaster):
             List of co-ordinates for WireArrays parallel to bot_layer wire, assumed to be equally spaced
         coord_list_o_override: Optional[Sequence[int]]
             List of co-ordinates for WireArrays orthogonal to bot_layer wire, assumed to be equally spaced
+        alternate_o: bool
+            If coord_o_list is computed (i.e. coord_o_list_override is not used) then every other track is skipped
+            for via spacing. Using alternate_o, we can choose which set of tracks is used and which is skipped.
+            This is useful to avoid line end spacing issues when two adjacent wires require via stacks.
 
         Returns
         -------
@@ -2806,8 +2810,10 @@ class TemplateBase(DesignMaster):
             if num_wires_o == 1:
                 tidx_list_o = [self.grid.coord_to_track(top_layer_o, warr.middle, RoundMode.NEAREST)]
             else:
-                tidx_list_o = tr_manager.spread_wires(top_layer_o, [w_type] * num_wires_o, tidx_l, tidx_r,
+                tidx_list_o = tr_manager.spread_wires(top_layer_o, [w_type] * (2 * num_wires_o - 1), tidx_l, tidx_r,
                                                       (w_type, w_type), alignment=alignment_o)
+                tidx_list_o = tidx_list_o[1::2] if alternate_o else tidx_list_o[0::2]
+                num_wires_o = len(tidx_list_o)
             # need to compute coord_list for conversion to tidx in layers which are same direction as top_layer_o
             coord_list_o = [self.grid.track_to_coord(top_layer_o, tidx) for tidx in tidx_list_o]
         else:
