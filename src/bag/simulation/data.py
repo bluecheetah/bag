@@ -339,6 +339,7 @@ class AnalysisPSS:
     period: float
     fund: float
     autofund: bool
+    strobe: float
     options: ImmutableSortedDict[str, str]
     save_outputs: ImmutableList[str]
 
@@ -406,7 +407,7 @@ def analysis_from_dict(table: Dict[str, Any]) -> AnalysisInfo:
     elif ana_type is AnalysisType.PSS:
         return AnalysisPSS(table.get('p_port', ''), table.get('n_port', ''),
                            table.get('period', 0.0), table.get('fund', 0.0),
-                           table.get('autofund', False),
+                           table.get('autofund', False), table.get('strobe', 0.0),
                            ImmutableSortedDict(table.get('options', {})),
                            ImmutableList(table.get('save_outputs', [])))
     elif ana_type is AnalysisType.PAC:

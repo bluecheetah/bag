@@ -498,6 +498,8 @@ def _write_analysis(lines: List[str], sim_env: str, ana: AnalysisInfo, precision
             cur_line += f' fund={ana.fund}'
         if ana.autofund:
             cur_line += f' autofund=yes'
+        if ana.strobe != 0:
+            cur_line += f' strobeperiod={_format_val(ana.strobe)}'
     else:
         raise ValueError('Unknown analysis specification.')
 
