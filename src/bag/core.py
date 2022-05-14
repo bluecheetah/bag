@@ -583,7 +583,8 @@ class BagProject:
 
         if lvs_passed and run_rcx:
             print('running RCX...')
-            final_netlist, rcx_log = self.run_rcx(impl_lib, gen_cell_name, params=rcx_params)
+            final_netlist, rcx_log = self.run_rcx(impl_lib, gen_cell_name, params=rcx_params,
+                                                  layout=layout_file, netlist=lvs_netlist)
             final_netlist_type = DesignOutput.CDL
             if final_netlist:
                 print('RCX passed!')
@@ -1225,7 +1226,7 @@ class BagProject:
         return self.impl_db.run_lvs(lib_name, cell_name, **kwargs)
 
     def run_rcx(self, lib_name: str, cell_name: str,
-                params: Optional[Mapping[str, Any]] = None) -> Tuple[str, str]:
+                params: Optional[Mapping[str, Any]] = None, **kwargs: Any) -> Tuple[str, str]:
         """run RC extraction on the given cell.
 
         Parameters
@@ -1236,6 +1237,8 @@ class BagProject:
             cell name.
         params : Optional[Dict[str, Any]]
             optional RCX parameter values.
+        **kwargs :
+            optional keyword arguments.  See DbAccess class for details.
 
         Returns
         -------
@@ -1244,7 +1247,7 @@ class BagProject:
         log_fname : str
             RCX log file name.
         """
-        return self.impl_db.run_rcx(lib_name, cell_name, params=params)
+        return self.impl_db.run_rcx(lib_name, cell_name, params=params, **kwargs)
 
     def generate_lef(self, impl_lib: str, impl_cell: str, verilog_path: Path,
                      lef_path: Path, run_path: Path, options: Dict[str, Any]) -> bool:
