@@ -204,7 +204,14 @@ class Calibre(VirtuosoChecker):
             return flow_list
         elif self._rcx_mode is RCXMode.xrc or self._rcx_mode is RCXMode.xact:
             # Run LVS to create the Persistent Hierarchical Database (PHDB)
-            cmd = ['calibre', '-lvs', '-hier', '-spice', str(Path(run_dir).resolve()) + f'/svdb/{cell_name}.sp', '-nowait', None]
+            if run_dir:
+                spice_dir = Path(run_dir).resolve()
+            else:
+                # Get RCX default root run dir
+                spice_dir = self.get_config('rcx')['root_dir'].joinpath(lib_name, cell_name)
+            spice_net = str(spice_dir) + f'/svdb/{cell_name}.sp'
+
+            cmd = ['calibre', '-lvs', '-hier', '-spice', spice_net, '-nowait', None]
             flow_list = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
                                                 sch_view, params, 'rcx', cmd, all_pass_callback, run_dir,
                                                 str_suffix='_lvs')
