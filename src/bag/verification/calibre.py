@@ -186,6 +186,9 @@ class Calibre(VirtuosoChecker):
 
             return out_file_str, log_file
 
+        if not params:
+            params = {}
+
         if self._rcx_mode is RCXMode.qrc or self._rcx_mode is RCXMode.starrc:
             if self._rcx_mode is RCXMode.qrc:
                 cmd = ['qrc', '-64', '-cmd', None]
@@ -200,8 +203,6 @@ class Calibre(VirtuosoChecker):
                              (cmd, str(query_log), env, dir_name, all_pass_callback))
             return flow_list
         elif self._rcx_mode is RCXMode.xrc or self._rcx_mode is RCXMode.xact:
-            if not params:
-                params = {}
             # Run LVS to create the Persistent Hierarchical Database (PHDB)
             cmd = ['calibre', '-lvs', '-hier', '-spice', str(Path(run_dir).resolve()) + f'/svdb/{cell_name}.sp', '-nowait', None]
             flow_list = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
