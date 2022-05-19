@@ -656,7 +656,8 @@ class DbAccess(InterfaceBase, abc.ABC):
         return ans
 
     def run_rcx(self, lib_name: str, cell_name: str,
-                params: Optional[Mapping[str, Any]] = None) -> Tuple[str, str]:
+                params: Optional[Mapping[str, Any]] = None,
+                **kwargs: Any) -> Tuple[str, str]:
         """run RC extraction on the given cell.
 
         Parameters
@@ -667,6 +668,8 @@ class DbAccess(InterfaceBase, abc.ABC):
             cell name.
         params : Optional[Dict[str, Any]]
             optional RCX parameter values.
+        **kwargs :
+            optional keyword arguments.  See DbAccess class for details.
 
         Returns
         -------
@@ -675,7 +678,7 @@ class DbAccess(InterfaceBase, abc.ABC):
         log_fname : str
             RCX log file name.
         """
-        coro = self.async_run_rcx(lib_name, cell_name, params=params)
+        coro = self.async_run_rcx(lib_name, cell_name, params=params, **kwargs)
         results = batch_async_task([coro])
         if results is None:
             return '', ''

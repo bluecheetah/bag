@@ -67,6 +67,11 @@ class RCXMode(Enum):
     starrc = 3
 
 
+class NetlistType(Enum):
+    SPF = 0
+    SPECTRE = 1
+
+
 class Calibre(VirtuosoChecker):
     """A subclass of VirtuosoChecker that uses Calibre for verification.
 
@@ -155,12 +160,19 @@ class Calibre(VirtuosoChecker):
         def _rcx_passed_check(retcode: int, log_file: str) -> Tuple[str, str]:
             fpath = Path(log_file).resolve()
             out_file: Path = fpath.parent
-            if self._rcx_mode is RCXMode.qrc or self._rcx_mode is RCXMode.starrc:
+
+            netlist_type = params.get('netlist_type',
+                                      self.get_config('rcx')['params'].get('netlist_type', 'SPF'))
+            netlist_type = NetlistType[netlist_type]
+
+            if netlist_type is NetlistType.SPF:
+                # Default for QRC, StarRC. Can be set for xRC
                 out_file = out_file.joinpath(f'{cell_name}.spf')
                 if not is_valid_file(out_file, None, 60, 1):
                     return '', log_file
                 out_file_str = str(out_file)
-            elif self._rcx_mode is RCXMode.xrc or self._rcx_mode is RCXMode.xact:
+            elif netlist_type is NetlistType.SPECTRE:
+                # Default for xRC, XACT
                 out_file = out_file.joinpath(f'{cell_name}.pex.netlist')
                 if not is_valid_file(out_file, None, 60, 1):
                     return '', log_file
@@ -170,9 +182,12 @@ class Calibre(VirtuosoChecker):
                                 parent_dir.joinpath(f'{cell_name}.pex.netlist.{cell_name}.pxi'),
                                 ]
             else:
-                raise ValueError(f'Unknown rcx_program = {self._rcx_mode.name}')
+                raise ValueError(f'Unknown netlist_type = {netlist_type}')
 
             return out_file_str, log_file
+
+        if not params:
+            params = {}
 
         if self._rcx_mode is RCXMode.qrc or self._rcx_mode is RCXMode.starrc:
             if self._rcx_mode is RCXMode.qrc:
@@ -188,21 +203,29 @@ class Calibre(VirtuosoChecker):
                              (cmd, str(query_log), env, dir_name, all_pass_callback))
             return flow_list
         elif self._rcx_mode is RCXMode.xrc or self._rcx_mode is RCXMode.xact:
-            cmd = ['calibre', '-lvs', '-hier', '-spice', run_dir.resolve() + f'svdb/{cell_name}.sp', '-nowait', None]
+            # Run LVS to create the Persistent Hierarchical Database (PHDB)
+            if run_dir:
+                spice_dir = Path(run_dir).resolve()
+            else:
+                # Get RCX default root run dir
+                spice_dir = self.get_config('rcx')['root_dir'].joinpath(lib_name, cell_name)
+            spice_net = str(spice_dir) + f'/svdb/{cell_name}.sp'
+
+            cmd = ['calibre', '-lvs', '-hier', '-spice', spice_net, '-nowait', None]
             flow_list = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
                                                 sch_view, params, 'rcx', cmd, all_pass_callback, run_dir,
                                                 str_suffix='_lvs')
+            # Create the parasitic database (PDB)
             extract_type = params.get('extract_type', self.get_config('rcx')['params'].get('extract_type', 'rc'))
             cmd = ['calibre', '-xrc', '-pdb', f'-{extract_type}', '-turbo 1', '-nowait', None]
             flow2 = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
                                             sch_view, params, 'rcx', cmd, all_pass_callback, run_dir, str_suffix='_pdb')
-
+            # Output the netlist
             cmd = ['calibre', '-xrc', '-fmt', '-all', '-nowait', None]
             flow3 = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
                                             sch_view, params, 'rcx', cmd, _rcx_passed_check, run_dir)
             flow_list.insert(len(flow_list), flow2[-1])
             flow_list.insert(len(flow_list), flow3[-1])
-
             return flow_list
         else:
             raise ValueError(f'Unknown rcx_program = {self._rcx_mode.name}')
