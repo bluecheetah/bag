@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Union, Type, Mapping, Dict, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Any, Union, Type, Mapping, Dict, Optional, Sequence, cast, Tuple
 
 import abc
 import pprint
@@ -184,13 +184,20 @@ class DesignerBase(LoggingBase, abc.ABC):
         return await self._sim_db.async_batch_design(dut_specs, rcx_params=rcx_params)
 
     async def async_new_dut(self, impl_cell: str,
-                            lay_cls: Union[Type[TemplateBase], Type[Module], str],
+                            dut_cls: Union[Type[TemplateBase], Type[Module], str],
                             dut_params: Mapping[str, Any], extract: Optional[bool] = None,
                             name_prefix: str = '', name_suffix: str = '',
                             flat: bool = False, export_lay: bool = False) -> DesignInstance:
-        return await self._sim_db.async_new_design(impl_cell, lay_cls, dut_params, extract=extract,
+        return await self._sim_db.async_new_design(impl_cell, dut_cls, dut_params, extract=extract,
                                                    name_prefix=name_prefix, name_suffix=name_suffix,
                                                    flat=flat, export_lay=export_lay)
+
+    async def async_new_em_dut(self, impl_cell: str, dut_cls: Union[Type[TemplateBase], str],
+                               dut_params: Mapping[str, Any], name_prefix: str = '', name_suffix: str = '',
+                               flat: bool = False, export_lay: bool = False) -> Tuple[DesignInstance, Path]:
+        return await self._sim_db.async_new_em_design(impl_cell, dut_cls, dut_params,
+                                                      name_prefix=name_prefix, name_suffix=name_suffix,
+                                                      flat=flat, export_lay=export_lay)
 
     async def async_simulate_tbm_obj(self, sim_id: str, dut: Optional[DesignInstance],
                                      tbm: TestbenchManager, tb_params: Optional[Mapping[str, Any]],
@@ -201,3 +208,7 @@ class DesignerBase(LoggingBase, abc.ABC):
     async def async_simulate_mm_obj(self, sim_id: str, dut: Optional[DesignInstance],
                                     mm: MeasurementManager) -> MeasureResult:
         return await self._sim_db.async_simulate_mm_obj(sim_id, self._work_dir / sim_id, dut, mm)
+
+    async def async_gen_nport(self, dut: DesignInstance, gds_file: Path, em_params: Mapping[str, Any], root_path: Path
+                              ) -> Path:
+        return await self._sim_db.async_gen_nport(dut, gds_file, em_params, root_path)

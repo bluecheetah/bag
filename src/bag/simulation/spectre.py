@@ -56,7 +56,7 @@ reserve_params = {'freq', 'time'}
 
 
 class SpectreInterface(SimProcessManager):
-    """This class handles interaction with Ocean simulators.
+    """This class handles interaction with Spectre simulators.
 
     Parameters
     ----------

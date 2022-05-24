@@ -37,7 +37,7 @@ from typing import Mapping, Any, List, Tuple
 from pathlib import Path
 
 from ..concurrent.core import batch_async_task
-from ..io.file import write_yaml
+from ..io.file import write_yaml, is_valid_file
 from .base import EmSimProcessManager
 
 
@@ -50,27 +50,10 @@ class EMXInterface(EmSimProcessManager):
         temporary file directory for SimAccess.
     sim_config : Mapping[str, Any]
         the simulation configuration dictionary.
-    cell_name : str
-        Name of the inductor cell
-    gds_file : Path
-        path to the gds file of the inductor cell
-    params : Mapping[str, Any]
-        various EMX parameters
-    root_path : Path
-        Root path for running sims and storing results
     """
 
-    def __init__(self, tmp_dir: str, sim_config: Mapping[str, Any], cell_name: str, gds_file: Path,
-                 params: Mapping[str, Any], root_path: Path) -> None:
+    def __init__(self, tmp_dir: str, sim_config: Mapping[str, Any]) -> None:
         EmSimProcessManager.__init__(self, tmp_dir, sim_config)
-        self._params: Mapping[str, Any] = params
-        self._cell_name: str = cell_name
-        self._root_path: Path = root_path.resolve()
-        self._em_base_path = self._root_path / 'em_meas'
-        self._gds_file: Path = gds_file.resolve()
-
-        self._model_path = self._em_base_path / cell_name
-        self._model_path.mkdir(parents=True, exist_ok=True)
 
         # check for proc file
         self._proc_file: Path = Path(sim_config['proc_file']).resolve()
@@ -80,8 +63,17 @@ class EMXInterface(EmSimProcessManager):
         self._parallel: int = sim_config.get('parallel', 1)
         self._simul_freq: int = sim_config.get('simul_freq', 1)
 
-    def _set_em_option(self) -> Tuple[List[str], List[Path]]:
-        em_options: Mapping[str, Any] = self._params['em_options']
+    @staticmethod
+    def _get_em_base_path(root_path: Path) -> Path:
+        return root_path.resolve() / 'em_meas'
+
+    def _get_model_path(self, root_path: Path, cell_name: str) -> Path:
+        em_base_path = self._get_em_base_path(root_path)
+        return em_base_path / cell_name
+
+    def _set_em_option(self, cell_name: str, params: Mapping[str, Any], model_path: Path
+                       ) -> Tuple[List[str], List[Path]]:
+        em_options: Mapping[str, Any] = params['em_options']
         fmin: float = em_options['fmin']
         fmax: float = em_options['fmax']
         fstep: float = em_options['fstep']
@@ -102,8 +94,8 @@ class EMXInterface(EmSimProcessManager):
         cmd_opts = ['--print-command-line', '-l', '0'] if show_cmd else []
 
         # get port list
-        port_list: List[str] = self._params['port_list']
-        gnd_list: List[str] = self._params['gnd_list']
+        port_list: List[str] = params['port_list']
+        gnd_list: List[str] = params['gnd_list']
 
         # port options: avoid changing the original list
         portlist_n = port_list.copy()
@@ -120,21 +112,22 @@ class EMXInterface(EmSimProcessManager):
             port_string.extend(['-p', f'P{(idx + n_ports):02d}={port}'])
 
         # get s/y parameters and model
+        model_path.mkdir(parents=True, exist_ok=True)
         # s parameter file
-        sp_file = self._model_path / f'{self._cell_name}.s{n_ports}p'
+        sp_file = model_path / f'{cell_name}.s{n_ports}p'
         sp_opts = ['--format=touchstone', '-s', str(sp_file)]
         # y parameter file
-        yp_file = self._model_path / f'{self._cell_name}.y{n_ports}p'
+        yp_file = model_path / f'{cell_name}.y{n_ports}p'
         yp_opts = ['--format=touchstone', '-y', str(yp_file)]
         # y matlab file
-        ym_file = self._model_path / f'{self._cell_name}.y'
+        ym_file = model_path / f'{cell_name}.y'
         ym_opts = ['--format=matlab', '-y', str(ym_file)]
         # pz model (removed as it slows down simulation)
         # state_file = self._model_path / f'{self._cell_name}.pz'
         # st_opts = ['--format=spectre', f'--model-file={state_file}', '--save-model-state']
 
         # log file
-        log_file = self._model_path / f'{self._cell_name}.log'
+        log_file = model_path / f'{cell_name}.log'
         log_opts = [f'--log-file={log_file}']
 
         # other options
@@ -143,7 +136,7 @@ class EMXInterface(EmSimProcessManager):
 
         # get extra options
         extra_opts = []
-        extra_options: Mapping[str, Any] = self._params['extra_options']
+        extra_options: Mapping[str, Any] = params['extra_options']
         if extra_options:
             for opt, value in extra_options.items():
                 extra_opts.append(f'--{opt}={value}')
@@ -156,54 +149,60 @@ class EMXInterface(EmSimProcessManager):
                    yp_opts + ym_opts + log_opts
         return emx_opts, [sp_file, yp_file, ym_file, log_file]
 
-    async def async_gen_nport(self) -> None:
+    async def async_gen_nport(self, cell_name: str, gds_file: Path, params: Mapping[str, Any], root_path: Path) -> Path:
         """
         Run EM sim to get nport for the current module.
         """
-        # get paths and options   proc_file, gds_file
-        emx_opts, outfiles = self._set_em_option()
+        # get paths and options
+        model_path = self._get_model_path(root_path, cell_name)
+        emx_opts, outfiles = self._set_em_option(cell_name, params, model_path)
 
         # delete log file if exist -- use it for error checking
-        if outfiles[-1].exists():
+        if is_valid_file(outfiles[-1], None, 60, 1):
             outfiles[-1].unlink()
 
         # get emx simulation working
-        emx_cmd = [f'{os.environ["EMX_HOME"]}/bin/emx', str(self._gds_file), self._cell_name, str(self._proc_file)]
+        emx_cmd = [f'{os.environ["EMX_HOME"]}/bin/emx', str(gds_file.resolve()), cell_name, str(self._proc_file)]
         print("EMX simulation started.")
         start = time.time()
-        ret_code = await self.manager.async_new_subprocess(emx_cmd + emx_opts, cwd=str(self._em_base_path),
-                                                           log=f'{self._em_base_path}/bag_emx.log')
+        em_base_path = self._get_em_base_path(root_path)
+        ret_code = await self.manager.async_new_subprocess(emx_cmd + emx_opts, cwd=str(em_base_path),
+                                                           log=f'{em_base_path}/bag_emx.log')
 
         # check whether ends correctly
-        if ret_code is None or ret_code != 0 or not outfiles[-1].exists():
+        if ret_code is None or ret_code != 0 or not is_valid_file(outfiles[-1], None, 60, 1):
             raise Exception('EMX stops with error.')
         else:
             period = (time.time() - start) / 60
             print(f'EMX simulation finished successfully.\nLog file is in {outfiles[-1]}')
             print(f'EMX simulation takes {period} minutes')
 
-    def _set_mdl_option(self, model_type: str) -> Tuple[List[str], Path, List[Path]]:
+        return outfiles[0]
+
+    @staticmethod
+    def _set_mdl_option(cell_name: str, model_type: str, model_path: Path) -> Tuple[List[str], Path, List[Path]]:
         # model type
         type_opts = f'--type={model_type}'
 
-        ym_file = self._model_path / f'{self._cell_name}.y'
+        ym_file = model_path / f'{cell_name}.y'
 
         # scs model
-        scs_model = self._model_path / f'{self._cell_name}.scs'
+        scs_model = model_path / f'{cell_name}.scs'
         scs_opts = f'--spectre-file={scs_model}'
 
         # spice
-        sp_model = self._model_path / f'{self._cell_name}.sp'
+        sp_model = model_path / f'{cell_name}.sp'
         sp_opts = f'--spice-file={sp_model}'
 
         mdl_opts = [type_opts, str(ym_file), scs_opts, sp_opts]
 
         return mdl_opts, ym_file, [scs_model, sp_model]
 
-    async def async_gen_model(self):
-        model_type: str = self._params['model_type']
+    async def async_gen_model(self, cell_name: str, params: Mapping[str, Any], root_path: Path):
         # get options
-        mdl_opts, infile, outfiles = self._set_mdl_option(model_type)
+        model_type: str = params['model_type']
+        model_path = self._get_model_path(root_path, cell_name)
+        mdl_opts, infile, outfiles = self._set_mdl_option(cell_name, model_type, model_path)
 
         # delete model file if exist -- use it for error checking
         if outfiles[0].exists():
@@ -215,8 +214,9 @@ class EMXInterface(EmSimProcessManager):
         mdl_cmd = [f'{os.environ["EMX_HOME"]}/bin/modelgen'] + mdl_opts
         print("Model generation started.")
         start = time.time()
-        ret_code = await self.manager.async_new_subprocess(mdl_cmd, cwd=str(self._em_base_path),
-                                                           log=f'{self._em_base_path}/bag_modelgen.log')
+        em_base_path = self._get_em_base_path(root_path)
+        ret_code = await self.manager.async_new_subprocess(mdl_cmd, cwd=str(em_base_path),
+                                                           log=f'{em_base_path}/bag_modelgen.log')
 
         # check whether ends correctly
         if ret_code is None or ret_code != 0 or not outfiles[0].exists() or not outfiles[1].exists():
@@ -226,18 +226,19 @@ class EMXInterface(EmSimProcessManager):
             print('Model generation finished successfully.')
             print(f'Model generation takes {period} minutes')
 
-    def run_simulation(self) -> None:
-        coro = self.async_gen_nport()
+    def run_simulation(self, cell_name: str, gds_file: Path, params: Mapping[str, Any], root_path: Path) -> None:
+        coro = self.async_gen_nport(cell_name, gds_file, params, root_path)
         batch_async_task([coro])
-        if 'model_type' in self._params:
-            coro = self.async_gen_model()
+        if 'model_type' in params:
+            coro = self.async_gen_model(cell_name, params, root_path)
             batch_async_task([coro])
 
-    def process_output(self) -> None:
+    def process_output(self, cell_name: str, params: Mapping[str, Any], root_path: Path) -> None:
         # calculate inductance and quality factor
-        center_tap = self._params.get('center_tap', False)
+        center_tap = params.get('center_tap', False)
         print(f'center_tap is {center_tap}')
-        calculate_ind_q(self._model_path, self._cell_name, center_tap)
+        model_path = self._get_model_path(root_path, cell_name)
+        calculate_ind_q(model_path, cell_name, center_tap)
 
 
 def calculate_ind_q(model_path: Path, cell_name: str, center_tap: bool) -> None:

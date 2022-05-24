@@ -195,7 +195,7 @@ class EmSimAccess(abc.ABC):
         the simulation configuration dictionary.
     """
 
-    def __init__(self, parent: str, sim_config: Mapping[str, Any], **kwargs) -> None:
+    def __init__(self, parent: str, sim_config: Mapping[str, Any]) -> None:
         self._config = sim_config
         self._dir_path = (Path(parent) / "em_simulations").resolve()
 
@@ -210,11 +210,33 @@ class EmSimAccess(abc.ABC):
         return self._config
 
     @abc.abstractmethod
-    def run_simulation(self) -> None:
+    async def async_gen_nport(self, cell_name: str, gds_file: Path, params: Mapping[str, Any], root_path: Path) -> Path:
+        """A coroutine for running EM sim to generate nport for the current module.
+
+        Parameters
+        ----------
+        cell_name : str
+            Name of the cell
+        gds_file : Path
+            location of the gds file of the cell
+        params : Mapping[str, Any]
+            various EM parameters
+        root_path : Path
+            Root path for running sims and storing results
+
+        Returns
+        -------
+        sp_file: Path
+            location of generated s parameter file
+        """
         pass
 
+    def run_simulation(self, cell_name: str, gds_file: Path, params: Mapping[str, Any], root_path: Path) -> None:
+        coro = self.async_gen_nport(cell_name, gds_file, params, root_path)
+        batch_async_task([coro])
+
     @abc.abstractmethod
-    def process_output(self) -> None:
+    def process_output(self, cell_name: str, params: Mapping[str, Any], root_path: Path) -> None:
         pass
 
 
@@ -229,8 +251,8 @@ class EmSimProcessManager(EmSimAccess, abc.ABC):
         the simulation configuration dictionary.
     """
 
-    def __init__(self, tmp_dir: str, sim_config: Mapping[str, Any], **kwargs) -> None:
-        EmSimAccess.__init__(self, tmp_dir, sim_config, **kwargs)
+    def __init__(self, tmp_dir: str, sim_config: Mapping[str, Any]) -> None:
+        EmSimAccess.__init__(self, tmp_dir, sim_config)
 
         mgr_class: Type[SubProcessManager] = import_class(sim_config.get('mgr_class', SubProcessManager))
         mgr_kwargs: Dict[str, Any] = sim_config.get('mgr_kwargs', {})

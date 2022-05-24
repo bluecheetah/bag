@@ -133,6 +133,13 @@ class BagProject:
         sim_cls = cast(Type['SimAccess'], import_class(self.bag_config['simulation']['class']))
         self._sim = sim_cls(bag_tmp_dir, self.bag_config['simulation'])
 
+        # make EmSimAccess instance if it is defined in bag_config.yaml
+        if 'em_simulation' in self.bag_config:
+            em_sim_cls = cast(Type['EmSimAccess'], import_class(self.bag_config['em_simulation']['class']))
+            self._em_sim = em_sim_cls(bag_tmp_dir, self.bag_config['em_simulation'])
+        else:
+            self._em_sim = None
+
         # make LEFInterface instance
         self._lef: Optional[LEFInterface] = None
         lef_config = self.bag_config.get('lef', None)
@@ -157,6 +164,10 @@ class BagProject:
     @property
     def sim_access(self) -> SimAccess:
         return self._sim
+
+    @property
+    def em_sim_access(self) -> Optional[EmSimAccess]:
+        return self._em_sim
 
     def close_bag_server(self) -> None:
         """Close the BAG database server."""
@@ -1053,19 +1064,16 @@ class BagProject:
 
         # TODO: caching
 
-        # make EM_SimAccess instance if it is defined in bag_config.yaml
-        if 'em_simulation' in self.bag_config:
+        # run EM simulation if it is defined in bag_config.yaml
+        if self._em_sim:
             self.export_layout(impl_lib, impl_cell, str(gds_file))
 
-            em_sim_cls = cast(Type['EmSimAccess'], import_class(self.bag_config['em_simulation']['class']))
-            em_obj: EmSimAccess = em_sim_cls(get_bag_tmp_dir(), self.bag_config['em_simulation'],
-                                             cell_name=impl_cell, gds_file=gds_file, params=params, root_path=root_path)
             if force_sim:
-                em_obj.run_simulation()
+                self._em_sim.run_simulation(impl_cell, gds_file, params, root_path)
             else:
                 print('Skipping EM simulation and using old results. Use "--force_sim" to force EM simulation.')
             if process_output:
-                em_obj.process_output()
+                self._em_sim.process_output(impl_cell, params, root_path)
         else:
             raise NotImplementedError('EM simulation is not set up in bag_config.yaml.')
 

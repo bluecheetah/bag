@@ -179,10 +179,17 @@ class DesignDB(LoggingBase):
 
         return dut
 
-    def new_design(self, impl_cell: str, lay_cls: Union[Type[TemplateBase], Type[Module], str],
+    async def async_new_em_design(self, impl_cell: str, dut_cls: Union[Type[TemplateBase], str],
+                                  dut_params: Mapping[str, Any], name_prefix: str = '', name_suffix: str = '',
+                                  flat: bool = False, export_lay: bool = False) -> Tuple[DesignInstance, Path]:
+        return await self._create_dut(impl_cell, dut_cls, dut_params, extract=False,
+                                      name_prefix=name_prefix, name_suffix=name_suffix, flat=flat,
+                                      export_lay=export_lay, em=True)
+
+    def new_design(self, impl_cell: str, dut_cls: Union[Type[TemplateBase], Type[Module], str],
                    dut_params: Mapping[str, Any], extract: Optional[bool] = None,
                    rcx_params: Optional[Mapping[str, Any]] = None, export_lay: bool = False) -> DesignInstance:
-        coro = self.async_new_design(impl_cell, lay_cls, dut_params, extract=extract, rcx_params=rcx_params,
+        coro = self.async_new_design(impl_cell, dut_cls, dut_params, extract=extract, rcx_params=rcx_params,
                                      export_lay=export_lay)
         results = batch_async_task([coro])
         if results is None:
@@ -197,7 +204,7 @@ class DesignDB(LoggingBase):
                           dut_cls: Union[Type[TemplateBase], Type[Module], str],
                           dut_params: Mapping[str, Any], extract: Optional[bool] = None,
                           name_prefix: str = '', name_suffix: str = '', flat: bool = False,
-                          export_lay: bool = False) -> Tuple[DesignInstance, Optional[Path]]:
+                          export_lay: bool = False, em: bool = False) -> Tuple[DesignInstance, Optional[Path]]:
         sim_ext = self._sim_type.extension
         exact_cell_names = {impl_cell}
 
@@ -225,8 +232,8 @@ class DesignDB(LoggingBase):
                                           exact_cell_names=exact_cell_names)
             assert is_valid_file(gds_file, None, 60, 1, True)
         else:
-            if extract:
-                raise ValueError('Cannot run extraction without layout.')
+            if extract or em:
+                raise ValueError('Cannot run extraction or em simulations without layout.')
 
             lay_master = None
             sch_params = dut_params
@@ -234,8 +241,8 @@ class DesignDB(LoggingBase):
             layout_hash = 0
             gds_file = ''
 
-        if extract and lay_master is None:
-            raise ValueError('Cannot run extraction without layout.')
+        if (extract or em) and lay_master is None:
+            raise ValueError('Cannot run extraction or em simulations without layout.')
 
         self.log(f'Creating schematic: {sch_cls.__name__}')
         sch_master: Module = self._sch_db.new_master(sch_cls, params=sch_params)
@@ -281,19 +288,23 @@ class DesignDB(LoggingBase):
                 write_yaml(self._info_file, self._info_specs)
             shutil.rmtree(tmp_dir)  # Remove temporary directory
 
-        if extract or (extract is None and self._extract):
-            ans = dir_path / 'rcx.sp'
-            if not ans.exists() or self._force_extract:
-                extract_info = dir_path
+        if em:
+            ans = Path(cdl_netlist)
+            extract_info = dir_path / 'layout.gds'
+        else:
+            if extract or (extract is None and self._extract):
+                ans = dir_path / 'rcx.sp'
+                if not ans.exists() or self._force_extract:
+                    extract_info = dir_path
+                else:
+                    extract_info = None
             else:
                 extract_info = None
-        else:
-            extract_info = None
-            ans = dir_path / f'netlist.{sim_ext}'
-            if not ans.exists():
-                self._sch_db.batch_schematic(sch_dut_list, output=self._sim_type, fname=str(ans),
-                                             name_prefix=name_prefix, name_suffix=name_suffix,
-                                             exact_cell_names=exact_cell_names, flat=flat)
+                ans = dir_path / f'netlist.{sim_ext}'
+                if not ans.exists():
+                    self._sch_db.batch_schematic(sch_dut_list, output=self._sim_type, fname=str(ans),
+                                                 name_prefix=name_prefix, name_suffix=name_suffix,
+                                                 exact_cell_names=exact_cell_names, flat=flat)
 
         return DesignInstance(self._sch_db.lib_name, impl_cell, sch_master, lay_master, ans, cv_info_out,
                               list(sch_master.pins.keys())), extract_info
@@ -358,7 +369,7 @@ class DesignDB(LoggingBase):
 
 
 class SimulationDB(LoggingBase):
-    """A classes that caches netlists, layouts, and simulation results.
+    """A class that caches netlists, layouts, and simulation results.
     """
 
     def __init__(self, log_file: str, dsn_db: DesignDB, force_sim: bool = False,
@@ -367,6 +378,7 @@ class SimulationDB(LoggingBase):
 
         self._dsn_db = dsn_db
         self._sim = self._dsn_db.sch_db.prj.sim_access
+        self._em_sim = self._dsn_db.sch_db.prj.em_sim_access
         self._force_sim = force_sim
         self._precision = precision
 
@@ -401,10 +413,10 @@ class SimulationDB(LoggingBase):
         return obj_cls(meas_specs, self.log_file, log_level=self.log_level,
                        precision=self._precision)
 
-    def new_design(self, impl_cell: str, lay_cls: Union[Type[TemplateBase], Type[Module], str],
+    def new_design(self, impl_cell: str, dut_cls: Union[Type[TemplateBase], Type[Module], str],
                    dut_params: Mapping[str, Any], extract: Optional[bool] = None,
                    rcx_params: Optional[Mapping[str, Any]] = None, export_lay: bool = False) -> DesignInstance:
-        return self._dsn_db.new_design(impl_cell, lay_cls, dut_params, extract=extract, rcx_params=rcx_params,
+        return self._dsn_db.new_design(impl_cell, dut_cls, dut_params, extract=extract, rcx_params=rcx_params,
                                        export_lay=export_lay)
 
     def simulate_tbm(self, sim_id: str, sim_dir: Path, dut: DesignInstance,
@@ -453,6 +465,13 @@ class SimulationDB(LoggingBase):
                                                    rcx_params=rcx_params,
                                                    name_prefix=name_prefix, export_lay=export_lay,
                                                    name_suffix=name_suffix, flat=flat)
+
+    async def async_new_em_design(self, impl_cell: str, dut_cls: Union[Type[TemplateBase], Type[Module], str],
+                                  dut_params: Mapping[str, Any], name_prefix: str = '', name_suffix: str = '',
+                                  flat: bool = False, export_lay: bool = False) -> Tuple[DesignInstance, Path]:
+        return await self._dsn_db.async_new_em_design(impl_cell, dut_cls, dut_params,
+                                                      name_prefix=name_prefix, name_suffix=name_suffix,
+                                                      export_lay=export_lay, flat=flat)
 
     async def async_simulate_tbm_obj(self, sim_id: str, sim_dir: Path,
                                      dut: Optional[DesignInstance], tbm: TestbenchManager,
@@ -536,6 +555,10 @@ class SimulationDB(LoggingBase):
         else:  # for backwards compatibility
             result = await mm.async_measure_performance(sim_id, sim_dir, self, dut)
         return MeasureResult(dut, mm, result, harnesses)
+
+    async def async_gen_nport(self, dut: DesignInstance, gds_file: Path, em_params: Mapping[str, Any], root_path: Path
+                              ) -> Path:
+        return await self._em_sim.async_gen_nport(dut.cell_name, gds_file, em_params, root_path)
 
 
 def _set_dut(tb_params: Optional[Mapping[str, Any]], dut_lib: str, dut_cell: str
