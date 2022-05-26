@@ -573,7 +573,7 @@ class SimulationDB(LoggingBase):
     async def async_gen_nport(self, dut: DesignInstance, gds_file: Path, gds_cached: bool, em_params: Mapping[str, Any],
                               root_path: Path) -> Path:
         em_log = self._em_sim.get_log_path(root_path)
-        if is_valid_file(em_log, 'SUCCESS', 60, 1):
+        if is_valid_file(em_log, 'SUCCESS', 1, 1):
             force_sim = self._force_sim
             log_mtime = em_log.stat().st_mtime
         else:

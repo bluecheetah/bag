@@ -156,7 +156,7 @@ class EMXInterface(EmSimProcessManager):
 
         if run_sim:
             # delete log file if exist -- use it for error checking
-            if is_valid_file(outfiles[-1], None, 60, 1):
+            if is_valid_file(outfiles[-1], None, 1, 1):
                 outfiles[-1].unlink()
 
             # get emx simulation working
