@@ -209,8 +209,17 @@ class EmSimAccess(abc.ABC):
         """Mapping[str, Any]: simulation configurations."""
         return self._config
 
+    @staticmethod
+    def _get_em_base_path(root_path: Path) -> Path:
+        return root_path.resolve() / 'em_meas'
+
+    def get_log_path(self, root_path: Path) -> Path:
+        """Path: the directory for simulation files."""
+        return self._get_em_base_path(root_path) / 'bag_em.log'
+
     @abc.abstractmethod
-    async def async_gen_nport(self, cell_name: str, gds_file: Path, params: Mapping[str, Any], root_path: Path) -> Path:
+    async def async_gen_nport(self, cell_name: str, gds_file: Path, params: Mapping[str, Any], root_path: Path,
+                              run_sim: bool = False) -> Path:
         """A coroutine for running EM sim to generate nport for the current module.
 
         Parameters
@@ -223,6 +232,8 @@ class EmSimAccess(abc.ABC):
             various EM parameters
         root_path : Path
             Root path for running sims and storing results
+        run_sim : bool
+            True to run EM sim; False by default
 
         Returns
         -------
@@ -232,7 +243,7 @@ class EmSimAccess(abc.ABC):
         pass
 
     def run_simulation(self, cell_name: str, gds_file: Path, params: Mapping[str, Any], root_path: Path) -> None:
-        coro = self.async_gen_nport(cell_name, gds_file, params, root_path)
+        coro = self.async_gen_nport(cell_name, gds_file, params, root_path, run_sim=True)
         batch_async_task([coro])
 
     @abc.abstractmethod

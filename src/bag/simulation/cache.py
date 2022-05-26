@@ -87,8 +87,8 @@ class DesignDB(LoggingBase):
 
     def __init__(self, root_dir: Path, log_file: str, db_access: DbAccess,
                  sim_netlist_type: DesignOutput, sch_db: ModuleDB, lay_db: TemplateDB,
-                 extract: bool = False, gen_sch: bool = False, force_extract: bool = False,
-                 log_level: LogLevel = LogLevel.DEBUG) -> None:
+                 extract: bool = False, gen_sch_dut: bool = False, gen_sch_tb: bool = False,
+                 force_extract: bool = False, log_level: LogLevel = LogLevel.DEBUG) -> None:
         LoggingBase.__init__(self, 'dsn_db', log_file, log_level=log_level)
 
         self._root_dir = root_dir
@@ -98,7 +98,8 @@ class DesignDB(LoggingBase):
         self._lay_db = lay_db
         self._extract = extract
         self._force_extract = force_extract
-        self._gen_sch = gen_sch
+        self._gen_sch_dut = gen_sch_dut
+        self._gen_sch_tb = gen_sch_tb
         self._lay_map = get_gds_layer_map()
         self._obj_map = get_gds_object_map()
 
@@ -126,8 +127,12 @@ class DesignDB(LoggingBase):
         return self._sch_db
 
     @property
-    def gen_sch(self) -> bool:
-        return self._gen_sch
+    def gen_sch_dut(self) -> bool:
+        return self._gen_sch_dut
+
+    @property
+    def gen_sch_tb(self) -> bool:
+        return self._gen_sch_tb
 
     @property
     def extract(self) -> bool:
@@ -149,7 +154,7 @@ class DesignDB(LoggingBase):
                 dut = DesignInstance(_info['lib_name'], cell_name, None, None, ext_path / 'rcx.sp',
                                      [PySchCellViewInfo(static_info)], dut_pins)
             else:
-                dut, ext_path = await self._create_dut(**dut_info)
+                dut, ext_path, is_cached = await self._create_dut(**dut_info)
             ans.append(dut)
             if ext_path is not None and ext_path not in extract_set:
                 extract_set.add(ext_path)
@@ -171,9 +176,9 @@ class DesignDB(LoggingBase):
                                rcx_params: Optional[Mapping[str, Any]] = None,
                                name_prefix: str = '', name_suffix: str = '', flat: bool = False,
                                export_lay: bool = False) -> DesignInstance:
-        dut, ext_path = await self._create_dut(impl_cell, dut_cls, dut_params, extract=extract,
-                                               name_prefix=name_prefix, name_suffix=name_suffix,
-                                               flat=flat, export_lay=export_lay)
+        dut, ext_path, is_cached = await self._create_dut(impl_cell, dut_cls, dut_params, extract=extract,
+                                                          name_prefix=name_prefix, name_suffix=name_suffix,
+                                                          flat=flat, export_lay=export_lay)
         if ext_path is not None:
             await self._extract_netlist(ext_path, impl_cell, rcx_params)
 
@@ -181,7 +186,7 @@ class DesignDB(LoggingBase):
 
     async def async_new_em_design(self, impl_cell: str, dut_cls: Union[Type[TemplateBase], str],
                                   dut_params: Mapping[str, Any], name_prefix: str = '', name_suffix: str = '',
-                                  flat: bool = False, export_lay: bool = False) -> Tuple[DesignInstance, Path]:
+                                  flat: bool = False, export_lay: bool = False) -> Tuple[DesignInstance, Path, bool]:
         return await self._create_dut(impl_cell, dut_cls, dut_params, extract=False,
                                       name_prefix=name_prefix, name_suffix=name_suffix, flat=flat,
                                       export_lay=export_lay, em=True)
@@ -204,7 +209,7 @@ class DesignDB(LoggingBase):
                           dut_cls: Union[Type[TemplateBase], Type[Module], str],
                           dut_params: Mapping[str, Any], extract: Optional[bool] = None,
                           name_prefix: str = '', name_suffix: str = '', flat: bool = False,
-                          export_lay: bool = False, em: bool = False) -> Tuple[DesignInstance, Optional[Path]]:
+                          export_lay: bool = False, em: bool = False) -> Tuple[DesignInstance, Optional[Path], bool]:
         sim_ext = self._sim_type.extension
         exact_cell_names = {impl_cell}
 
@@ -255,7 +260,7 @@ class DesignDB(LoggingBase):
                                      fname=cdl_netlist, cv_info_out=cv_info_out,
                                      name_prefix=name_prefix, name_suffix=name_suffix,
                                      exact_cell_names=exact_cell_names)
-        if self._gen_sch:
+        if self._gen_sch_dut:
             self._sch_db.batch_schematic(sch_dut_list,
                                          name_prefix=name_prefix, name_suffix=name_suffix,
                                          exact_cell_names=exact_cell_names)
@@ -263,6 +268,7 @@ class DesignDB(LoggingBase):
         assert is_valid_file(cdl_netlist, None, 60, 1, True)
 
         self.log('Check for existing netlist')
+        is_cached = False
         hash_id = combine_hash(layout_hash, hash(sch_master.key))
         dir_list = self._cache.get(hash_id, None)
         if dir_list is None:
@@ -307,7 +313,7 @@ class DesignDB(LoggingBase):
                                                  exact_cell_names=exact_cell_names, flat=flat)
 
         return DesignInstance(self._sch_db.lib_name, impl_cell, sch_master, lay_master, ans, cv_info_out,
-                              list(sch_master.pins.keys())), extract_info
+                              list(sch_master.pins.keys())), extract_info, is_cached
 
     async def gds_check_cache(self, gds_file: str, cur_dir: Path) -> bool:
         if not gds_file:
@@ -394,6 +400,14 @@ class SimulationDB(LoggingBase):
     def extract(self) -> bool:
         return self._dsn_db.extract
 
+    @property
+    def gen_sch_dut(self) -> bool:
+        return self._dsn_db.gen_sch_dut
+
+    @property
+    def gen_sch_tb(self) -> bool:
+        return self._dsn_db.gen_sch_tb
+
     def make_tbm(self, tbm_cls: Union[Type[TestbenchManager], str], tbm_specs: Mapping[str, Any],
                  work_dir: Optional[Path] = None, tb_name: str = '',
                  logger: Optional[FileLogger] = None) -> TestbenchManager:
@@ -468,7 +482,7 @@ class SimulationDB(LoggingBase):
 
     async def async_new_em_design(self, impl_cell: str, dut_cls: Union[Type[TemplateBase], Type[Module], str],
                                   dut_params: Mapping[str, Any], name_prefix: str = '', name_suffix: str = '',
-                                  flat: bool = False, export_lay: bool = False) -> Tuple[DesignInstance, Path]:
+                                  flat: bool = False, export_lay: bool = False) -> Tuple[DesignInstance, Path, bool]:
         return await self._dsn_db.async_new_em_design(impl_cell, dut_cls, dut_params,
                                                       name_prefix=name_prefix, name_suffix=name_suffix,
                                                       export_lay=export_lay, flat=flat)
@@ -520,7 +534,7 @@ class SimulationDB(LoggingBase):
             prev_netlist.unlink()
 
         self.log(f'Configuring testbench manager {tbm.__class__.__name__}')
-        tbm.setup(sch_db, tb_params, cv_info_list, cv_netlist_list, gen_sch=self._dsn_db.gen_sch)
+        tbm.setup(sch_db, tb_params, cv_info_list, cv_netlist_list, gen_sch=self._dsn_db.gen_sch_tb)
         if not sim_netlist.is_file():
             self.error(f'Cannot find simulation netlist: {sim_netlist}')
 
@@ -556,9 +570,26 @@ class SimulationDB(LoggingBase):
             result = await mm.async_measure_performance(sim_id, sim_dir, self, dut)
         return MeasureResult(dut, mm, result, harnesses)
 
-    async def async_gen_nport(self, dut: DesignInstance, gds_file: Path, em_params: Mapping[str, Any], root_path: Path
-                              ) -> Path:
-        return await self._em_sim.async_gen_nport(dut.cell_name, gds_file, em_params, root_path)
+    async def async_gen_nport(self, dut: DesignInstance, gds_file: Path, gds_cached: bool, em_params: Mapping[str, Any],
+                              root_path: Path) -> Path:
+        em_log = self._em_sim.get_log_path(root_path)
+        if is_valid_file(em_log, 'SUCCESS', 60, 1):
+            force_sim = self._force_sim
+            log_mtime = em_log.stat().st_mtime
+        else:
+            force_sim = True
+            log_mtime = -1
+
+        run_sim = True
+        if not force_sim and gds_cached:
+            gds_mtime = gds_file.stat().st_mtime
+            run_sim = log_mtime <= gds_mtime
+
+        if run_sim:
+            self.log('Starting new EM sim')
+        else:
+            self.log('Returning previous EM sim result')
+        return await self._em_sim.async_gen_nport(dut.cell_name, gds_file, em_params, root_path, run_sim)
 
 
 def _set_dut(tb_params: Optional[Mapping[str, Any]], dut_lib: str, dut_cell: str

@@ -91,13 +91,16 @@ class DesignerBase(LoggingBase, abc.ABC):
 
     @classmethod
     def design_cell(cls, prj: BagProject, specs: Mapping[str, Any], extract: bool = False,
-                    force_sim: bool = False, force_extract: bool = False, gen_sch: bool = False,
-                    log_level: LogLevel = LogLevel.DEBUG) -> None:
+                    force_sim: bool = False, force_extract: bool = False, gen_cell: bool = False,
+                    gen_cell_dut: bool = False, gen_cell_tb: bool = False, log_level: LogLevel = LogLevel.DEBUG
+                    ) -> None:
         dsn_str: Union[str, Type[DesignerBase]] = specs['dsn_class']
         root_dir: Union[str, Path] = specs['root_dir']
         impl_lib: str = specs['impl_lib']
         dsn_params: Mapping[str, Any] = specs['dsn_params']
         precision: int = specs.get('precision', 6)
+        gen_cell_dut |= gen_cell
+        gen_cell_tb |= gen_cell
 
         dsn_cls = cast(Type[DesignerBase], import_class(dsn_str))
         root_path = prj.get_root_path(root_dir)
@@ -105,7 +108,8 @@ class DesignerBase(LoggingBase, abc.ABC):
         dsn_options = dict(
             extract=extract,
             force_extract=force_extract,
-            gen_sch=gen_sch,
+            gen_sch_dut=gen_cell_dut,
+            gen_sch_tb=gen_cell_tb,
             log_level=log_level,
         )
         log_file = str(root_path / 'dsn.log')
@@ -194,7 +198,7 @@ class DesignerBase(LoggingBase, abc.ABC):
 
     async def async_new_em_dut(self, impl_cell: str, dut_cls: Union[Type[TemplateBase], str],
                                dut_params: Mapping[str, Any], name_prefix: str = '', name_suffix: str = '',
-                               flat: bool = False, export_lay: bool = False) -> Tuple[DesignInstance, Path]:
+                               flat: bool = False, export_lay: bool = False) -> Tuple[DesignInstance, Path, bool]:
         return await self._sim_db.async_new_em_design(impl_cell, dut_cls, dut_params,
                                                       name_prefix=name_prefix, name_suffix=name_suffix,
                                                       flat=flat, export_lay=export_lay)
@@ -209,6 +213,6 @@ class DesignerBase(LoggingBase, abc.ABC):
                                     mm: MeasurementManager) -> MeasureResult:
         return await self._sim_db.async_simulate_mm_obj(sim_id, self._work_dir / sim_id, dut, mm)
 
-    async def async_gen_nport(self, dut: DesignInstance, gds_file: Path, em_params: Mapping[str, Any], root_path: Path
-                              ) -> Path:
-        return await self._sim_db.async_gen_nport(dut, gds_file, em_params, root_path)
+    async def async_gen_nport(self, dut: DesignInstance, gds_file: Path, gds_cached: bool, em_params: Mapping[str, Any],
+                              root_path: Path) -> Path:
+        return await self._sim_db.async_gen_nport(dut, gds_file, gds_cached, em_params, root_path)

@@ -943,7 +943,8 @@ class BagProject:
         dsn_options = dict(
             extract=extract,
             force_extract=force_extract,
-            gen_sch=gen_cell_tb,
+            gen_sch_dut=gen_cell_dut,
+            gen_sch_tb=gen_cell_tb,
             log_level=log_level,
         )
         log_file = str(meas_path / 'meas.log')

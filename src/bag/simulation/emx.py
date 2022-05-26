@@ -37,7 +37,7 @@ from typing import Mapping, Any, List, Tuple
 from pathlib import Path
 
 from ..concurrent.core import batch_async_task
-from ..io.file import write_yaml, is_valid_file
+from ..io.file import write_yaml, is_valid_file, write_file
 from .base import EmSimProcessManager
 
 
@@ -62,10 +62,6 @@ class EMXInterface(EmSimProcessManager):
         self._key: str = sim_config.get('key', '')
         self._parallel: int = sim_config.get('parallel', 1)
         self._simul_freq: int = sim_config.get('simul_freq', 1)
-
-    @staticmethod
-    def _get_em_base_path(root_path: Path) -> Path:
-        return root_path.resolve() / 'em_meas'
 
     def _get_model_path(self, root_path: Path, cell_name: str) -> Path:
         em_base_path = self._get_em_base_path(root_path)
@@ -136,7 +132,7 @@ class EMXInterface(EmSimProcessManager):
 
         # get extra options
         extra_opts = []
-        extra_options: Mapping[str, Any] = params['extra_options']
+        extra_options: Mapping[str, Any] = params.get('extra_options')
         if extra_options:
             for opt, value in extra_options.items():
                 extra_opts.append(f'--{opt}={value}')
@@ -149,7 +145,8 @@ class EMXInterface(EmSimProcessManager):
                    yp_opts + ym_opts + log_opts
         return emx_opts, [sp_file, yp_file, ym_file, log_file]
 
-    async def async_gen_nport(self, cell_name: str, gds_file: Path, params: Mapping[str, Any], root_path: Path) -> Path:
+    async def async_gen_nport(self, cell_name: str, gds_file: Path, params: Mapping[str, Any], root_path: Path,
+                              run_sim: bool = False) -> Path:
         """
         Run EM sim to get nport for the current module.
         """
@@ -157,25 +154,28 @@ class EMXInterface(EmSimProcessManager):
         model_path = self._get_model_path(root_path, cell_name)
         emx_opts, outfiles = self._set_em_option(cell_name, params, model_path)
 
-        # delete log file if exist -- use it for error checking
-        if is_valid_file(outfiles[-1], None, 60, 1):
-            outfiles[-1].unlink()
+        if run_sim:
+            # delete log file if exist -- use it for error checking
+            if is_valid_file(outfiles[-1], None, 60, 1):
+                outfiles[-1].unlink()
 
-        # get emx simulation working
-        emx_cmd = [f'{os.environ["EMX_HOME"]}/bin/emx', str(gds_file.resolve()), cell_name, str(self._proc_file)]
-        print("EMX simulation started.")
-        start = time.time()
-        em_base_path = self._get_em_base_path(root_path)
-        ret_code = await self.manager.async_new_subprocess(emx_cmd + emx_opts, cwd=str(em_base_path),
-                                                           log=f'{em_base_path}/bag_emx.log')
+            # get emx simulation working
+            emx_cmd = [f'{os.environ["EMX_HOME"]}/bin/emx', str(gds_file.resolve()), cell_name, str(self._proc_file)]
+            print("EMX simulation started.")
+            start = time.time()
+            em_base_path = self._get_em_base_path(root_path)
+            bag_log = self.get_log_path(root_path)
+            ret_code = await self.manager.async_new_subprocess(emx_cmd + emx_opts, cwd=str(em_base_path),
+                                                               log=str(bag_log))
 
-        # check whether ends correctly
-        if ret_code is None or ret_code != 0 or not is_valid_file(outfiles[-1], None, 60, 1):
-            raise Exception('EMX stops with error.')
-        else:
-            period = (time.time() - start) / 60
-            print(f'EMX simulation finished successfully.\nLog file is in {outfiles[-1]}')
-            print(f'EMX simulation takes {period} minutes')
+            # check whether ends correctly
+            if ret_code is None or ret_code != 0 or not is_valid_file(outfiles[-1], None, 60, 1):
+                raise Exception(f'EMX stops with error.\nLog file is in {outfiles[-1]}')
+            else:
+                period = (time.time() - start) / 60
+                print(f'EMX simulation finished successfully.\nLog file is in {outfiles[-1]}')
+                print(f'EMX simulation takes {period} minutes')
+                write_file(bag_log, 'SUCCESS', append=True)
 
         return outfiles[0]
 
@@ -227,7 +227,7 @@ class EMXInterface(EmSimProcessManager):
             print(f'Model generation takes {period} minutes')
 
     def run_simulation(self, cell_name: str, gds_file: Path, params: Mapping[str, Any], root_path: Path) -> None:
-        coro = self.async_gen_nport(cell_name, gds_file, params, root_path)
+        coro = self.async_gen_nport(cell_name, gds_file, params, root_path, run_sim=True)
         batch_async_task([coro])
         if 'model_type' in params:
             coro = self.async_gen_model(cell_name, params, root_path)
