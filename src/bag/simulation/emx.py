@@ -61,7 +61,7 @@ class EMXInterface(EmSimProcessManager):
             raise Exception(f'Cannot find process file: {self._proc_file}')
         self._key: str = sim_config.get('key', '')
         self._parallel: int = sim_config.get('parallel', 1)
-        self._simul_freq: int = sim_config.get('simul_freq', 1)
+        self._simul_freq: int = sim_config.get('simul_freq', 0)
 
     def _get_model_path(self, root_path: Path, cell_name: str) -> Path:
         em_base_path = self._get_em_base_path(root_path)
@@ -102,10 +102,10 @@ class EMXInterface(EmSimProcessManager):
                 portlist_n.remove(gnd)
         port_string = []
         for idx, port in enumerate(portlist_n):
-            port_string.extend(['-p', f'P{idx:02d}={port}', '-i', f'P{idx:02d}'])
+            port_string.extend(['-p', f'P{idx:02d}=\'{port}\'', '-i', f'P{idx:02d}'])
         n_ports = len(portlist_n)
         for idx, port in enumerate(gndlist_n):
-            port_string.extend(['-p', f'P{(idx + n_ports):02d}={port}'])
+            port_string.extend(['-p', f'P{(idx + n_ports):02d}=\'{port}\''])
 
         # get s/y parameters and model
         model_path.mkdir(parents=True, exist_ok=True)
@@ -128,7 +128,8 @@ class EMXInterface(EmSimProcessManager):
 
         # other options
         other_opts = [f'--parallel={self._parallel}', f'--simultaneous-frequencies={self._simul_freq}',
-                      '--max-memory=80%', '--quasistatic', '--dump-connectivity']
+                      '--max-memory=80%', '--quasistatic', '--dump-connectivity', '--via-sidewall=*',
+                      '--via-inductance=*']
 
         # get extra options
         extra_opts = []
