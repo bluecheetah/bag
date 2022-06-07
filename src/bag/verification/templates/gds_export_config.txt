@@ -28,7 +28,7 @@ noWarn                             ""
 objectMap                          ""
 outputDir                          "{{run_dir}}"
 #pathToPolygon
-pinAttNum                          "0"
+pinAttNum                          "1"
 propMap                            ""
 #propValueOnly
 #rectToBox
