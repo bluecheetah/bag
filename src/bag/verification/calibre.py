@@ -203,29 +203,18 @@ class Calibre(VirtuosoChecker):
                              (cmd, str(query_log), env, dir_name, all_pass_callback))
             return flow_list
         elif self._rcx_mode is RCXMode.xrc or self._rcx_mode is RCXMode.xact:
-            # Run LVS to create the Persistent Hierarchical Database (PHDB)
-            if run_dir:
-                spice_dir = Path(run_dir).resolve()
-            else:
-                # Get RCX default root run dir
-                spice_dir = self.get_config('rcx')['root_dir'].joinpath(lib_name, cell_name)
-            spice_net = str(spice_dir) + f'/svdb/{cell_name}.sp'
+            # Run LVS to create the Persistent Hierarchical Database (PHDB) (already done in setup_lvs_flow)
 
-            cmd = ['calibre', '-lvs', '-hier', '-spice', spice_net, '-nowait', None]
-            flow_list = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
-                                                sch_view, params, 'rcx', cmd, all_pass_callback, run_dir,
-                                                str_suffix='_lvs')
             # Create the parasitic database (PDB)
             extract_type = params.get('extract_type', self.get_config('rcx')['params'].get('extract_type', 'rc'))
             cmd = ['calibre', '-xrc', '-pdb', f'-{extract_type}', '-turbo 1', '-nowait', None]
-            flow2 = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
+            flow0 = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
                                             sch_view, params, 'rcx', cmd, all_pass_callback, run_dir, str_suffix='_pdb')
             # Output the netlist
             cmd = ['calibre', '-xrc', '-fmt', '-all', '-nowait', None]
-            flow3 = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
+            flow1 = self._setup_flow_helper(lib_name, cell_name, layout, netlist, lay_view,
                                             sch_view, params, 'rcx', cmd, _rcx_passed_check, run_dir)
-            flow_list.insert(len(flow_list), flow2[-1])
-            flow_list.insert(len(flow_list), flow3[-1])
+            flow_list = [flow0[-1], flow1[-1]]
             return flow_list
         else:
             raise ValueError(f'Unknown rcx_program = {self._rcx_mode.name}')
