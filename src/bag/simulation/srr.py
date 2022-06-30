@@ -49,6 +49,7 @@ _ANA_TYPE_MAP = {
     'td.pss': 'pss_td',
     'fd.pss': 'pss_fd',
     'timedomain.pnoise': 'pnoise',
+    'pac_timepoint': 'pac',
 }
 
 
@@ -146,11 +147,15 @@ def get_sim_env(ds: pysrrDataSet) -> str:
 
     ds_name = ds._name
     ana_type = ds.getAnalysisType()
+    sim_env_fmt = rf'[a-zA-Z0-9]+_[a-zA-Z0-9]+'
     if ana_type.endswith(('.pss', '.pnoise')):
         ana_type_end = ana_type.split('.')[-1]
-        matched = re.search(rf'__+{ana_type_end}__+(.+)__+.*-{ana_type}', ds_name)
+        matched = re.search(rf'__+{ana_type_end}__+({sim_env_fmt})__+.*-', ds_name)
+    elif ana_type.startswith('pac_'):
+        ana_type_start = ana_type.split('_')[0]
+        matched = re.search(rf'__+{ana_type_start}__+({sim_env_fmt})__+.*-{ana_type}', ds_name)
     else:
-        matched = re.search(rf'__+{ana_type}__+(.+)__+.*', ds_name)
+        matched = re.search(rf'__+{ana_type}__+({sim_env_fmt})__+.*', ds_name)
     if not matched:
         raise ValueError(f"Unmatched dataset name {ds_name} of analysis type {ana_type}")
     return matched.group(1)
