@@ -339,6 +339,7 @@ class Calculator(ast.NodeVisitor):
         ast.Div: operator.truediv,
         ast.Invert: operator.neg,
         ast.FloorDiv: operator.floordiv,
+        ast.USub: operator.neg,
     }
 
     def __init__(self, namespace: Mapping[str, Any]) -> None:
@@ -356,6 +357,10 @@ class Calculator(ast.NodeVisitor):
         left = self.visit(node.left)
         right = self.visit(node.right)
         return self._OP_MAP[type(node.op)](left, right)
+
+    def visit_UnaryOp(self, node):
+        operand = self.visit(node.operand)
+        return self._OP_MAP[type(node.op)](operand)
 
     def visit_Num(self, node):
         return node.n
