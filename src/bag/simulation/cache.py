@@ -526,11 +526,13 @@ class SimulationDB(LoggingBase):
             tb_params = _set_dut(tb_params, dut.lib_name, dut.cell_name)
         if harnesses:
             for harness in harnesses:
-                cv_info_list.extend(harness.cv_info_list)
-                cv_netlist_list.append(harness.netlist_path)
-                _mtime = harness.netlist_path.stat().st_mtime
-                if _mtime > dut_mtime:
-                    dut_mtime = _mtime
+                if harness.netlist_path not in cv_netlist_list:
+                    # if harness is same as DUT, the netlist will already be present in the list
+                    cv_info_list.extend(harness.cv_info_list)
+                    cv_netlist_list.append(harness.netlist_path)
+                    _mtime = harness.netlist_path.stat().st_mtime
+                    if _mtime > dut_mtime:
+                        dut_mtime = _mtime
             tb_params = _set_harnesses(tb_params, harnesses)
         sim_netlist = tbm.sim_netlist_path
         sim_data_path = self._sim.get_sim_file(sim_dir, sim_id)
@@ -590,7 +592,7 @@ class SimulationDB(LoggingBase):
     async def async_gen_nport(self, dut: DesignInstance, gds_file: Path, gds_cached: bool, em_params: Mapping[str, Any],
                               root_path: Path) -> Path:
         em_log = self._em_sim.get_log_path(root_path)
-        if is_valid_file(em_log, 'SUCCESS', 60, 1):
+        if is_valid_file(em_log, 'SUCCESS', 1, 1):
             force_sim = self._force_sim
             log_mtime = em_log.stat().st_mtime
         else:

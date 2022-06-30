@@ -408,7 +408,7 @@ class Interpolator1D(DiffFunction):
         True to extrapolate data output of given bounds.  Defaults to False.
     """
 
-    def __init__(self, scale_list: List[Tuple[float, float]], values: numpy.ndarray, method: str = 'spline',
+    def __init__(self, scale_list: List[Tuple[float, float]], values: np.ndarray, method: str = 'spline',
                  extrapolate: bool = False):
         # error checking
         if len(values.shape) != 1:
@@ -416,7 +416,7 @@ class Interpolator1D(DiffFunction):
         elif len(scale_list) != 1:
             raise ValueError('input and output dimension mismatch.')
 
-        if method == 'linear':
+        if method == 'linear' or values.shape[0] <= 3:
             k = 1
         elif method == 'spline':
             k = 3
@@ -498,7 +498,7 @@ class Interpolator1DUnstructured(DiffFunction):
         elif len(points) != 1:
             raise ValueError('input and output dimension mismatch.')
 
-        if method == 'linear':
+        if method == 'linear' or values.shape[0] <= 3:
             k = 1
         elif method == 'spline':
             k = 3
