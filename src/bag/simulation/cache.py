@@ -302,8 +302,6 @@ class DesignDB(LoggingBase):
                     self._cache[hash_id] = dir_list
                 write_yaml(self._info_file, self._info_specs)
 
-                breakpoint()
-
             if dir_path is None:
                 dir_path = self._generate_cell(impl_cell, cdl_netlist, gds_file)
                 dir_list.append(dir_path.name)
