@@ -279,20 +279,37 @@ class DesignDB(LoggingBase):
             write_yaml(self._info_file, self._info_specs)
         else:
             dir_path = None
+            dirs_to_remove = []
             for dir_name in dir_list:
                 cur_dir = self._root_dir / dir_name
-                if filecmp.cmp(cdl_netlist, cur_dir / 'netlist.cdl', shallow=False):
+                cur_netlist = cur_dir / 'netlist.cdl'
+                if not cur_netlist.exists():  # Cached netlist is missing, should ignore and remove from the cache
+                    dirs_to_remove.append(dir_name)
+                    continue
+                if filecmp.cmp(cdl_netlist, cur_netlist, shallow=False):
                     is_cached = await self.gds_check_cache(gds_file, cur_dir)
                     if is_cached:
                         self.log('Found existing design, reusing DUT netlist.')
                         dir_path = cur_dir
                         break
 
+            if dirs_to_remove:
+                for dir_name in dirs_to_remove:
+                    dir_list.remove(dir_name)
+                if dir_list:  # Remove entry from cache
+                    del self._cache[hash_id]
+                else:
+                    self._cache[hash_id] = dir_list
+                write_yaml(self._info_file, self._info_specs)
+
+                breakpoint()
+
             if dir_path is None:
                 dir_path = self._generate_cell(impl_cell, cdl_netlist, gds_file)
                 dir_list.append(dir_path.name)
                 write_yaml(self._info_file, self._info_specs)
-            shutil.rmtree(tmp_dir)  # Remove temporary directory
+
+        shutil.rmtree(tmp_dir)  # Remove temporary directory
 
         if em:
             ans = Path(cdl_netlist)
