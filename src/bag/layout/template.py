@@ -2356,6 +2356,7 @@ class TemplateBase(DesignMaster):
     def connect_to_track_wires(self, wire_arr_list: Union[WireArray, List[WireArray]],
                                track_wires: Union[WireArray, List[WireArray]], *,
                                min_len_mode: Optional[MinLenMode] = None,
+                               ret_wire_list: Optional[List[WireArray]] = None,
                                debug: bool = False) -> Union[Optional[WireArray],
                                                              List[Optional[WireArray]]]:
         """Connect all given WireArrays to the given WireArrays on adjacent layer.
@@ -2368,6 +2369,8 @@ class TemplateBase(DesignMaster):
             list of tracks as WireArrays.
         min_len_mode : MinLenMode
             the minimum length extension mode.
+        ret_wire_list : Optional[List[WireArray]]
+            If not none, extended wires that are created will be appended to this list.
         debug : bool
             True to print debug messages.
 
@@ -2379,7 +2382,7 @@ class TemplateBase(DesignMaster):
         ans = []  # type: List[Optional[WireArray]]
         for warr in WireArray.wire_grp_iter(track_wires):
             tr = self.connect_to_tracks(wire_arr_list, warr.track_id, track_lower=warr.lower,
-                                        track_upper=warr.upper, min_len_mode=min_len_mode,
+                                        track_upper=warr.upper, min_len_mode=min_len_mode, ret_wire_list=ret_wire_list,
                                         debug=debug)
             ans.append(tr)
 
