@@ -1812,8 +1812,8 @@ class TemplateBase(DesignMaster):
 
     def get_available_tracks(self, layer_id: int, tid_lo: TrackType, tid_hi: TrackType,
                              lower: int, upper: int, width: int = 1, sep: HalfInt = HalfInt(1),
-                             include_last: bool = False, sep_margin: Optional[HalfInt] = None
-                             ) -> List[HalfInt]:
+                             include_last: bool = False, sep_margin: Optional[HalfInt] = None,
+                             uniform_grid: bool = False) -> List[HalfInt]:
         """Returns a list of available tracks between the given bounds.
 
         Parameters
@@ -1836,6 +1836,8 @@ class TemplateBase(DesignMaster):
             True to make "upper" inclusive.
         sep_margin : Optional[HalfInt]
             the margin between available tracks and surrounding wires, in number of tracks.
+        uniform_grid : bool
+            True to get available tracks on a uniform grid; False to get densely packed available tracks
 
         Returns
         -------
@@ -1870,7 +1872,7 @@ class TemplateBase(DesignMaster):
                 ans.append(HalfInt(cur_htr))
                 cur_htr += htr_sep
             else:
-                cur_htr += 1
+                cur_htr += htr_sep if uniform_grid else 1
 
         return ans
 
@@ -2636,8 +2638,8 @@ class TemplateBase(DesignMaster):
     def do_power_fill(self, layer_id: int, tr_manager: TrackManager,
                       vdd_warrs: Optional[Union[WireArray, List[WireArray]]] = None,
                       vss_warrs: Optional[Union[WireArray, List[WireArray]]] = None, bound_box: Optional[BBox] = None,
-                      x_margin: int = 0, y_margin: int = 0, sup_type: str = 'both', flip: bool = False
-                      ) -> Tuple[List[WireArray], List[WireArray]]:
+                      x_margin: int = 0, y_margin: int = 0, sup_type: str = 'both', flip: bool = False,
+                      uniform_grid: bool = False) -> Tuple[List[WireArray], List[WireArray]]:
         """Draw power fill on the given layer."""
         if bound_box is None:
             if self.bound_box is None:
@@ -2657,9 +2659,11 @@ class TemplateBase(DesignMaster):
         tr_bot = self.grid.coord_to_track(layer_id, cl, mode=RoundMode.GREATER_EQ)
         tr_top = self.grid.coord_to_track(layer_id, cu, mode=RoundMode.LESS_EQ)
         trs = self.get_available_tracks(layer_id, tid_lo=tr_bot, tid_hi=tr_top, lower=lower, upper=upper,
-                                        width=fill_width, sep=fill_space, sep_margin=sep_margin)
+                                        width=fill_width, sep=fill_space, sep_margin=sep_margin,
+                                        uniform_grid=uniform_grid)
         top_vdd: List[WireArray] = []
         top_vss: List[WireArray] = []
+        htr_sep = HalfInt.convert(fill_space).dbl_value
         for ncur, tr_idx in enumerate(trs):
             # tr_idx = (htr0 + ncur * htr_pitch - 1) / 2
             warr = self.add_wires(layer_id, tr_idx, lower, upper, width=fill_width)
@@ -2668,7 +2672,8 @@ class TemplateBase(DesignMaster):
             elif sup_type.lower() == 'vdd':
                 top_vdd.append(warr)
             elif sup_type.lower() == 'both':
-                if (ncur % 2 == 0) != flip:
+                _ncur = HalfInt.convert(tr_idx).dbl_value // htr_sep if uniform_grid else ncur
+                if (_ncur % 2 == 0) != flip:
                     top_vss.append(warr)
                 else:
                     top_vdd.append(warr)
@@ -2740,7 +2745,8 @@ class TemplateBase(DesignMaster):
                           mlm_dict: Optional[Mapping[int, MinLenMode]] = None,
                           ret_warr_dict: Optional[Mapping[int, WireArray]] = None,
                           coord_list_p_override: Optional[Sequence[int]] = None,
-                          coord_list_o_override: Optional[Sequence[int]] = None, alternate_o: bool = False) -> WireArray:
+                          coord_list_o_override: Optional[Sequence[int]] = None, alternate_o: bool = False
+                          ) -> WireArray:
         """Helper method to draw via stack and connections upto top layer, assuming connections can be on grid.
         Should work regardless of direction of top layer and bot layer.
 
