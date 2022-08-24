@@ -506,6 +506,11 @@ class SimulationDB(LoggingBase):
                                      dut: Optional[DesignInstance], tbm: TestbenchManager,
                                      tb_params: Optional[Mapping[str, Any]], tb_name: str = '',
                                      harnesses: Optional[Sequence[DesignInstance]] = None) -> SimResults:
+        if isinstance(tb_params, dict):
+            va_cvinfo = tb_params.pop('va_cvinfo', None)
+        else:
+            va_cvinfo = None
+
         if not tb_name:
             tb_name = sim_id
 
@@ -550,8 +555,15 @@ class SimulationDB(LoggingBase):
         elif prev_netlist.exists():
             prev_netlist.unlink()
 
+        # add custom VerilogA cvinfo if it exists
+        va_cvinfo_list = []
+        if va_cvinfo:
+            for _file in va_cvinfo:
+                va_cvinfo_list.append(PySchCellViewInfo(str(Path(_file).resolve())))
+
         self.log(f'Configuring testbench manager {tbm.__class__.__name__}')
-        tbm.setup(sch_db, tb_params, cv_info_list, cv_netlist_list, gen_sch=self._dsn_db.gen_sch_tb)
+        tbm.setup(sch_db, tb_params, cv_info_list, cv_netlist_list, gen_sch=self._dsn_db.gen_sch_tb,
+                  va_cvinfo_list=va_cvinfo_list)
         if not sim_netlist.is_file():
             self.error(f'Cannot find simulation netlist: {sim_netlist}')
 

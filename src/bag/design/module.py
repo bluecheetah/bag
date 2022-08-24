@@ -719,9 +719,14 @@ class Module(DesignMaster):
                 raise ValueError('Got a non dictionary for the connections in '
                                  'design_sources_and_loads')
 
-            if cell_type not in type_to_value_dict[lib]:
-                raise ValueError(f'Got an unsupported type {cell_type} for element type in '
-                                 f'design_sources_and_loads')
+            if lib in type_to_value_dict:
+                if cell_type not in type_to_value_dict[lib]:
+                    raise ValueError(f'Got an unsupported type {cell_type} for element type in '
+                                     f'design_sources_and_loads')
+            else:
+                if not isinstance(value, Mapping):
+                    raise ValueError(f'value must be dictionary if element type {cell_type} is not from supported '
+                                     f'libraries')
 
             # make sure value is either string or dictionary
             if isinstance(value, (int, float)):
@@ -748,7 +753,10 @@ class Module(DesignMaster):
                                          f'with type {type(val)}')
 
             _name: Optional[str] = params_dict.get('name')
-            tmp = template_names[lib].get(cell_type, 'X{}')
+            if lib in template_names:
+                tmp = template_names[lib].get(cell_type, 'X{}')
+            else:
+                tmp = 'X{}'
             if _name:
                 if _name.startswith(tmp[:-2]):
                     tmp_name = _name
