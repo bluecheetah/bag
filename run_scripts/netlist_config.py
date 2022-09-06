@@ -514,6 +514,24 @@ netlist_map_default = {
             }
         },
     },
+    'ahdlLib': {
+        'comparator': {
+            'lib_name': 'ahdlLib',
+            'cell_name': 'comparator',
+            'in_terms': ['sigin', 'sigref'],
+            'io_terms': [],
+            'is_prim': True,
+            'nets': [],
+            'out_terms': ['sigout'],
+            'props': {
+                'sigout_high': [3, ''],
+                'sigout_low': [3, ''],
+                'sigin_offset': [3, ''],
+                'comp_slope': [3, ''],
+            },
+            'va': '${CDSHOME}/tools/dfII/samples/artist/ahdlLib/comparator/veriloga/veriloga.va',
+        },
+    },
 }
 
 mos_default = {
@@ -747,6 +765,8 @@ def populate_diode(config: Dict[str, Any], netlist_map: Dict[str, Any],
     static: bool = config.get('static', False)
     template_key = 'diode_static' if static else 'diode'
 
+    if 'types' not in config:
+        return
     for cell_name, model_name in config['types']:
         # populate netlist_map
         cur_info = copy.deepcopy(dio_default)

@@ -54,6 +54,7 @@ from typing import (
 import abc
 import time
 from collections import OrderedDict
+from itertools import chain
 
 from pybag.enum import DesignOutput, SupplyWrapMode
 from pybag.core import (
@@ -489,6 +490,7 @@ class MasterDB(abc.ABC):
             rmin = kwargs.get('rmin', 2000)
             precision = kwargs.get('precision', 6)
             cv_info_list = kwargs.get('cv_info_list', [])
+            va_cvinfo_list = kwargs.get('va_cvinfo_list', [])
             cv_info_out = kwargs.get('cv_info_out', None)
             cv_netlist_list = kwargs.get('cv_netlist_list', [])
 
@@ -498,7 +500,7 @@ class MasterDB(abc.ABC):
 
             implement_netlist(fname, content_list, top_list, output, flat, shell, top_subckt,
                               square_bracket, rmin, precision, supply_wrap_mode, prim_fname,
-                              cv_info_list, cv_netlist_list, cv_info_out)
+                              cv_info_list, cv_netlist_list, cv_info_out, va_cvinfo_list)
         else:
             raise ValueError('Unknown design output type: {}'.format(output.name))
         end = time.time()
@@ -599,15 +601,16 @@ class MasterDB(abc.ABC):
         """
         supply_wrap_mode: SupplyWrapMode = kwargs.pop('supply_wrap_mode', SupplyWrapMode.NONE)
         cv_info_list: List[PySchCellView] = kwargs.get('cv_info_list', [])
+        va_cvinfo_list: List[PySchCellView] = kwargs.get('va_cvinfo_list', [])
         shell: bool = kwargs.get('shell', False)
         exact_cell_names: Set[str] = kwargs.get('exact_cell_names', set())
         prefix: str = kwargs.get('name_prefix', self._name_prefix)
         suffix: str = kwargs.get('name_suffix', self._name_suffix)
         empty_dict = {}
 
-        if cv_info_list:
+        if cv_info_list or va_cvinfo_list:
             # need to avoid name collision
-            cv_netlist_names = set((cv.cell_name for cv in cv_info_list))
+            cv_netlist_names = set((cv.cell_name for cv in chain(cv_info_list, va_cvinfo_list)))
 
             # check that exact cell names won't collide with existing names in netlist
             for name in exact_cell_names:
