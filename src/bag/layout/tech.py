@@ -342,10 +342,12 @@ class TechInfo(PyTech):
         """
         return self.config['dnw_layers']
 
-    @staticmethod
-    def has_res_metal() -> bool:
+    def has_res_metal(self) -> bool:
         """Returns True if res_metal layers exist in this process"""
-        return True
+        res_metal_layer_table = self.config.get('res_metal_layer_table', {})
+        if res_metal_layer_table:
+            return True
+        return False
 
     def get_res_metal_layers(self, layer_id: int) -> List[Tuple[str, str]]:
         """Returns a list of layers associated with the given metal resistor.
