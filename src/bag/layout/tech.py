@@ -342,6 +342,11 @@ class TechInfo(PyTech):
         """
         return self.config['dnw_layers']
 
+    @staticmethod
+    def has_res_metal() -> bool:
+        """Returns True if res_metal layers exist in this process"""
+        return True
+
     def get_res_metal_layers(self, layer_id: int) -> List[Tuple[str, str]]:
         """Returns a list of layers associated with the given metal resistor.
 
@@ -355,7 +360,9 @@ class TechInfo(PyTech):
         res_list : List[Tuple[str, str]]
             list of resistor layers.
         """
-        return self.config['res_metal_layer_table'][layer_id]
+        if self.has_res_metal():
+            return self.config['res_metal_layer_table'][layer_id]
+        raise ValueError('res_metal does not exist in the process.')
 
     def get_res_rsquare(self, res_type: str) -> float:
         """Returns R-square for the given resistor type.

@@ -786,6 +786,9 @@ class TemplateBase(DesignMaster):
     def add_bbox_collection(self, lay_purp: Tuple[str, str], bcol: BBoxCollection) -> None:
         self._layout.add_rect_list(lay_purp[0], lay_purp[1], bcol)
 
+    def has_res_metal(self) -> bool:
+        return self._grid.tech_info.has_res_metal()
+
     def add_res_metal(self, layer_id: int, bbox: BBox) -> None:
         """Add a new metal resistor.
 
@@ -796,8 +799,11 @@ class TemplateBase(DesignMaster):
         bbox : BBox
             the resistor bounding box.
         """
-        for lay, purp in self._grid.tech_info.get_res_metal_layers(layer_id):
-            self._layout.add_rect(lay, purp, bbox, True)
+        if self.has_res_metal():
+            for lay, purp in self._grid.tech_info.get_res_metal_layers(layer_id):
+                self._layout.add_rect(lay, purp, bbox, True)
+        else:
+            raise ValueError('res_metal does not exist in the process.')
 
     def add_path(self, lay_purp: Tuple[str, str], width: int, points: List[PointType],
                  start_style: PathStyle, *, join_style: PathStyle = PathStyle.round,
