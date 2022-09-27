@@ -1344,3 +1344,47 @@ class ESDModuleBase(Module):
 
     def get_schematic_parameters(self) -> Mapping[str, str]:
         return {}
+
+
+class MIMModuleBase(Module):
+    """The base design class for a mim cap parametrized by width, length, and number of units.
+    """
+
+    def __init__(self, yaml_fname: str, database: ModuleDB, params: Param, **kwargs: Any) -> None:
+        Module.__init__(self, yaml_fname, database, params, **kwargs)
+        self._pins = dict(BOT=TermType.inout, TOP=TermType.inout)
+
+    @classmethod
+    def is_primitive(cls) -> bool:
+        return True
+
+    @classmethod
+    def get_params_info(cls) -> Mapping[str, str]:
+        return dict(
+            unit_width='mim width, in resolution units.',
+            unit_height='mim height, in resolution units.',
+            num_rows='Number of rows of unit mim.',
+            num_cols='Number of columns of unit mim.',
+            intent='mimcap flavor.',
+        )
+
+    def design(self, unit_width: int, unit_height: int, num_rows: int, num_cols: int, intent: str) -> None:
+        pass
+
+    def get_schematic_parameters(self) -> Mapping[str, str]:
+        w: int = self.params['unit_width']
+        l: int = self.params['unit_height']
+        scale = self.sch_scale
+        wstr = float_to_si_string(w * scale)
+        lstr = float_to_si_string(l * scale)
+        num_rows: int = self.params['num_rows']
+        num_cols: int = self.params['num_cols']
+
+        return dict(unit_width=wstr, unit_height=lstr, num_rows=str(num_rows), num_cols=str(num_cols))
+
+    def get_cell_name_from_parameters(self) -> str:
+        return 'mim_{}'.format(self.params['intent'])
+
+    def should_delete_instance(self) -> bool:
+        return self.params['unit_width'] == 0 or self.params['unit_height'] == 0 or self.params['num_rows'] == 0 or \
+               self.params['num_cols'] == 0

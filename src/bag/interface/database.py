@@ -527,6 +527,9 @@ class DbAccess(InterfaceBase, abc.ABC):
                 elif cell_name.startswith('esd_'):
                     # static esd template
                     module_name = 'ESDModuleBase'
+                elif cell_name.startswith('mim_'):
+                    # mim template
+                    module_name = 'MIMModuleBase'
                 else:
                     raise Exception('Unknown primitive cell: %s' % cell_name)
 

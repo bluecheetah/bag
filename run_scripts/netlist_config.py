@@ -591,6 +591,22 @@ res_default = {
     },
 }
 
+mim_default = {
+    'lib_name': 'BAG_prim',
+    'cell_name': '',
+    'in_terms': [],
+    'out_terms': [],
+    'io_terms': ['BOT', 'TOP'],
+    'nets': [],
+    'is_prim': True,
+    'props': {
+        'unit_width': [3, ''],
+        'unit_height': [3, ''],
+        'num_rows': [3, ''],
+        'num_cols': [3, ''],
+    },
+}
+
 mos_cdl_fmt = """.SUBCKT {{ cell_name }} B D G S
 *.PININFO B:B D:B G:B S:B
 {{ prefix }}M0 D G S B {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
@@ -618,6 +634,12 @@ res_metal_cdl_fmt = """.SUBCKT {{ cell_name }} MINUS PLUS
 res_cdl_fmt = """.SUBCKT {{ cell_name }}{% if num_ports == 3 %} BULK{% endif %} MINUS PLUS
 *.PININFO{% if num_ports == 3 %} BULK:B{% endif %} MINUS:B PLUS:B
 {{ prefix }}R0 PLUS MINUS{% if num_ports == 3 %} BULK{% endif %} {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+.ENDS
+"""
+
+mim_cdl_fmt = """.SUBCKT {{ cell_name }} BOT TOP
+*.PININFO BOT:B TOP:B
+{{ prefix }}C0 TOP BOT {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 .ENDS
 """
 
@@ -650,6 +672,12 @@ parameters l w
 ends {{ cell_name }}
 """
 
+mim_spectre_fmt = """subckt {{ cell_name }} BOT TOP
+parameters unit_width unit_height num_rows num_cols
+{{ prefix }}C0 TOP BOT {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+ends {{ cell_name }}
+"""
+
 mos_verilog_fmt = """module {{ cell_name }}(
     inout B,
     inout D,
@@ -673,6 +701,7 @@ supported_formats = {
         'diode_static': 'diode_cdl_static',
         'res_metal': 'res_metal_cdl',
         'res': 'res_cdl',
+        'mim': 'mim_cdl',
     },
     DesignOutput.SPECTRE: {
         'fname': 'bag_prim.scs',
@@ -681,6 +710,7 @@ supported_formats = {
         'diode_static': 'diode_scs_static',
         'res_metal': 'res_metal_scs',
         'res': 'res_scs',
+        'mim': 'mim_scs',
     },
     DesignOutput.VERILOG: {
         'fname': 'bag_prim.v',
@@ -689,6 +719,7 @@ supported_formats = {
         'diode_static': '',
         'res_metal': '',
         'res': '',
+        'mim': '',
     },
     DesignOutput.SYSVERILOG: {
         'fname': 'bag_prim.sv',
@@ -697,6 +728,7 @@ supported_formats = {
         'diode_static': '',
         'res_metal': '',
         'res': '',
+        'mim': '',
     },
 }
 
@@ -712,7 +744,9 @@ jinja_env = Environment(
          'res_metal_cdl': res_metal_cdl_fmt,
          'res_metal_scs': res_metal_spectre_fmt,
          'res_cdl': res_cdl_fmt,
-         'res_scs': res_spectre_fmt}),
+         'res_scs': res_spectre_fmt,
+         'mim_cdl': mim_cdl_fmt,
+         'mim_scs': mim_spectre_fmt}),
     keep_trailing_newline=True,
 )
 
@@ -726,7 +760,9 @@ prefix_dict = {
     'res_metal_cdl': 'R',
     'res_metal_scs': 'R',
     'res_cdl': 'R',
-    'res_scs': 'R'
+    'res_scs': 'R',
+    'mim_cdl': 'C',
+    'mim_scs': 'C',
 }
 
 
@@ -852,6 +888,29 @@ def populate_res(config: Dict[str, Any], netlist_map: Dict[str, Any], inc_lines:
                     ))
 
 
+def populate_mim(config: Dict[str, Any], netlist_map: Dict[str, Any], inc_lines: Dict[DesignOutput, List[str]]) -> None:
+    for idx, (cell_name, model_name) in enumerate(config['types']):
+        # populate netlist_map
+        cur_info = copy.deepcopy(mim_default)
+        cur_info['cell_name'] = cell_name
+        netlist_map[cell_name] = cur_info
+
+        # write bag_prim netlist
+        for v, lines in inc_lines.items():
+            param_list = config[v.name]
+            template_name = supported_formats[v]['mim']
+            if template_name:
+                mim_template = jinja_env.get_template(template_name)
+                lines.append('\n')
+                lines.append(
+                    mim_template.render(
+                        cell_name=cell_name,
+                        model_name=_get_model_name(model_name, v.name),
+                        param_list=param_list,
+                        prefix=_get_prefix(config, v, template_name),
+                    ))
+
+
 def _get_model_name(model_name: Union[str, Dict[str, str]], key: str) -> str:
     if isinstance(model_name, str):
         return model_name
@@ -887,6 +946,8 @@ def get_info(config: Dict[str, Any], output_dir: Path
     populate_diode(config['diode'], netlist_map, inc_lines)
     populate_res_metal(config['res_metal'], netlist_map, inc_lines)
     populate_res(config['res'], netlist_map, inc_lines)
+    if 'mim' in config:
+        populate_mim(config['mim'], netlist_map, inc_lines)
     populate_custom_cells(inc_lines)
 
     prim_files: Dict[int, str] = {}
