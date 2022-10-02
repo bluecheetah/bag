@@ -98,7 +98,8 @@ class Instance:
             elif item.type == 'PARAMS':
                 self.params.append(item.value)
             elif item.type == 'PORTS':
-                if item.value.startswith('nmos4') or item.value.startswith('pmos4'):
+                if item.value.startswith('nmos4') or item.value.startswith('pmos4') or \
+                        item.value.startswith('nmos3') or item.value.startswith('pmos3'):
                     self.prim = item.value
                     self.is_transistor = True
                     self.is_BAG_prim = True

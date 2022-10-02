@@ -1194,7 +1194,18 @@ class MosModuleBase(Module):
 
     def get_cell_name_from_parameters(self) -> str:
         mos_type = self.orig_cell_name.split('_')[0]
-        return '{}_{}'.format(mos_type, self.params['intent'])
+        intent: str = self.params['intent']
+
+        # choose 3 terminal mos without extra parameter by encoding it in the intent
+        # e.g.: 3_standard
+        if intent.startswith('4_'):
+            # Case 1: changing to 4 terminal mos if schematic template has 3 terminal mos
+            return f'{mos_type[:-1]}4_{intent.split("_")[-1]}'
+        if intent.startswith('3_'):
+            # Case 2: changing to 3 terminal mos if schematic template has 4 terminal mos
+            return f'{mos_type[:-1]}3_{intent.split("_")[-1]}'
+        # Case 3: final mos is same as schematic template mos
+        return f'{mos_type}_{intent}'
 
     def should_delete_instance(self) -> bool:
         return self.params['nf'] == 0 or self.params['w'] == 0

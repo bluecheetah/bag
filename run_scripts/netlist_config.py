@@ -549,6 +549,21 @@ mos_default = {
     },
 }
 
+mos3_default = {
+    'lib_name': 'BAG_prim',
+    'cell_name': '',
+    'in_terms': [],
+    'out_terms': [],
+    'io_terms': ['D', 'G', 'S'],
+    'nets': [],
+    'is_prim': True,
+    'props': {
+        'l': [3, ''],
+        'w': [3, ''],
+        'nf': [3, ''],
+    },
+}
+
 dio_default = {
     'lib_name': 'BAG_prim',
     'cell_name': '',
@@ -613,6 +628,12 @@ mos_cdl_fmt = """.SUBCKT {{ cell_name }} B D G S
 .ENDS
 """
 
+mos3_cdl_fmt = """.SUBCKT {{ cell_name }} D G S
+*.PININFO D:B G:B S:B
+{{ prefix }}M0 D G S {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+.ENDS
+"""
+
 dio_cdl_fmt = """.SUBCKT {{ cell_name }}{% if ports|length == 3 %} GUARD_RING{% endif %} MINUS PLUS
 *.PININFO{% if ports|length == 3 %} GUARD_RING:B{% endif %} MINUS:B PLUS:B
 {{ prefix }}D0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
@@ -646,6 +667,12 @@ mim_cdl_fmt = """.SUBCKT {{ cell_name }} BOT TOP
 mos_spectre_fmt = """subckt {{ cell_name }} B D G S
 parameters l w nf
 {{ prefix }}M0 D G S B {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+ends {{ cell_name }}
+"""
+
+mos3_spectre_fmt = """subckt {{ cell_name }} D G S
+parameters l w nf
+{{ prefix }}M0 D G S {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 ends {{ cell_name }}
 """
 
@@ -687,6 +714,14 @@ mos_verilog_fmt = """module {{ cell_name }}(
 endmodule
 """
 
+mos3_verilog_fmt = """module {{ cell_name }}(
+    inout D,
+    inout G,
+    inout S
+);
+endmodule
+"""
+
 scs_ideal_balun = """subckt ideal_balun d c p n
     K0 d 0 p c transformer n1=2
     K1 d 0 c n transformer n1=2
@@ -697,6 +732,7 @@ supported_formats = {
     DesignOutput.CDL: {
         'fname': 'bag_prim.cdl',
         'mos': 'mos_cdl',
+        'mos3': 'mos3_cdl',
         'diode': 'diode_cdl',
         'diode_static': 'diode_cdl_static',
         'res_metal': 'res_metal_cdl',
@@ -706,6 +742,7 @@ supported_formats = {
     DesignOutput.SPECTRE: {
         'fname': 'bag_prim.scs',
         'mos': 'mos_scs',
+        'mos3': 'mos3_scs',
         'diode': 'diode_scs',
         'diode_static': 'diode_scs_static',
         'res_metal': 'res_metal_scs',
@@ -715,6 +752,7 @@ supported_formats = {
     DesignOutput.VERILOG: {
         'fname': 'bag_prim.v',
         'mos': '',
+        'mos3': '',
         'diode': '',
         'diode_static': '',
         'res_metal': '',
@@ -724,6 +762,7 @@ supported_formats = {
     DesignOutput.SYSVERILOG: {
         'fname': 'bag_prim.sv',
         'mos': '',
+        'mos3': '',
         'diode': '',
         'diode_static': '',
         'res_metal': '',
@@ -735,7 +774,9 @@ supported_formats = {
 jinja_env = Environment(
     loader=DictLoader(
         {'mos_cdl': mos_cdl_fmt,
+         'mos3_cdl': mos3_cdl_fmt,
          'mos_scs': mos_spectre_fmt,
+         'mos3_scs': mos3_spectre_fmt,
          'mos_verilog': mos_verilog_fmt,
          'diode_cdl': dio_cdl_fmt,
          'diode_scs': dio_spectre_fmt,
@@ -752,7 +793,9 @@ jinja_env = Environment(
 
 prefix_dict = {
     'mos_cdl': 'M',
+    'mos3_cdl': 'M',
     'mos_scs': 'M',
+    'mos3_scs': 'M',
     'diode_cdl': 'X',
     'diode_scs': 'X',
     'diode_cdl_static': 'X',
@@ -773,17 +816,23 @@ def populate_header(config: Dict[str, Any], inc_lines: Dict[DesignOutput, List[s
 
 
 def populate_mos(config: Dict[str, Any], netlist_map: Dict[str, Any],
-                 inc_lines: Dict[DesignOutput, List[str]]) -> None:
+                 inc_lines: Dict[DesignOutput, List[str]], key: str = 'mos') -> None:
+    if key == 'mos':
+        _default = mos_default
+    elif key == 'mos3':
+        _default = mos3_default
+    else:
+        raise ValueError(f'Unknown key = {key}')
     for cell_name, model_name in config['types']:
         # populate netlist_map
-        cur_info = copy.deepcopy(mos_default)
+        cur_info = copy.deepcopy(_default)
         cur_info['cell_name'] = cell_name
         netlist_map[cell_name] = cur_info
 
         # write bag_prim netlist
         for v, lines in inc_lines.items():
             param_list = config[v.name]
-            template_name = supported_formats[v]['mos']
+            template_name = supported_formats[v][key]
             if template_name:
                 mos_template = jinja_env.get_template(template_name)
                 lines.append('\n')
@@ -943,6 +992,8 @@ def get_info(config: Dict[str, Any], output_dir: Path
     populate_mos(config['mos'], netlist_map, inc_lines)
     if 'mos_rf' in config:
         populate_mos(config['mos_rf'], netlist_map, inc_lines)
+    if 'mos3' in config:
+        populate_mos(config['mos3'], netlist_map, inc_lines, 'mos3')
     populate_diode(config['diode'], netlist_map, inc_lines)
     populate_res_metal(config['res_metal'], netlist_map, inc_lines)
     populate_res(config['res'], netlist_map, inc_lines)

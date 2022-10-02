@@ -513,7 +513,8 @@ class DbAccess(InterfaceBase, abc.ABC):
                 template = self._tmp_env.from_string(read_file(primitive_table[cell_name]))
                 return template.render(**param_dict)
             else:
-                if cell_name.startswith('nmos4_') or cell_name.startswith('pmos4_'):
+                if cell_name.startswith('nmos4_') or cell_name.startswith('pmos4_') or \
+                        cell_name.startswith('nmos3_') or cell_name.startswith('pmos3_'):
                     # transistor template
                     module_name = 'MosModuleBase'
                 elif cell_name.startswith('ndio_') or cell_name.startswith('pdio_'):
