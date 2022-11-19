@@ -2691,6 +2691,42 @@ class TemplateBase(DesignMaster):
             self.draw_vias_on_intersections(vss_warrs, top_vss)
         return top_vdd, top_vss
 
+    def do_multi_power_fill(self, layer_id: int, tr_manager: TrackManager, strap_list: List[Union[WireArray, List[WireArray]]],
+                            bound_box: Optional[BBox] = None, x_margin: int = 0, y_margin: int = 0,
+                            uniform_grid: bool = False) -> List[List[WireArray]]:
+        """Draw power fill on the given layer. Accepts as many different supply nets as provided."""
+        if bound_box is None:
+            if self.bound_box is None:
+                raise ValueError("bound_box is not set")
+            bound_box = self.bound_box
+        bound_box = bound_box.expand(dx=-x_margin, dy=-y_margin)
+        is_horizontal = (self.grid.get_direction(layer_id) == 0)
+        if is_horizontal:
+            cl, cu = bound_box.yl, bound_box.yh
+            lower, upper = bound_box.xl, bound_box.xh
+        else:
+            cl, cu = bound_box.xl, bound_box.xh
+            lower, upper = bound_box.yl, bound_box.yh
+        fill_width = tr_manager.get_width(layer_id, 'sup')
+        fill_space = tr_manager.get_sep(layer_id, ('sup', 'sup'))
+        sep_margin = tr_manager.get_sep(layer_id, ('sup', ''))
+        tr_bot = self.grid.coord_to_track(layer_id, cl, mode=RoundMode.GREATER_EQ)
+        tr_top = self.grid.coord_to_track(layer_id, cu, mode=RoundMode.LESS_EQ)
+        trs = self.get_available_tracks(layer_id, tid_lo=tr_bot, tid_hi=tr_top, lower=lower, upper=upper,
+                                        width=fill_width, sep=fill_space, sep_margin=sep_margin,
+                                        uniform_grid=uniform_grid)
+        all_wars = [[] for _ in range(len(strap_list))]
+        htr_sep = HalfInt.convert(fill_space).dbl_value
+        if len(trs) < len(strap_list):
+            raise ValueError('Not enough available tracks to fill for all provided supplies')
+        for ncur, tr_idx in enumerate(trs):
+            warr = self.add_wires(layer_id, tr_idx, lower, upper, width=fill_width)
+            _ncur = HalfInt.convert(tr_idx).dbl_value // htr_sep if uniform_grid else ncur
+            all_wars[_ncur % len(strap_list)].append(warr)
+        for top_warr, bot_warr in zip(strap_list, all_wars):
+            self.draw_vias_on_intersections(top_warr, bot_warr)
+        return all_wars
+
     def get_lef_options(self, options: Dict[str, Any], config: Mapping[str, Any]) -> None:
         """Populate the LEF options dictionary.
 
