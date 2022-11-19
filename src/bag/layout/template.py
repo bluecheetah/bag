@@ -2691,10 +2691,34 @@ class TemplateBase(DesignMaster):
             self.draw_vias_on_intersections(vss_warrs, top_vss)
         return top_vdd, top_vss
 
-    def do_multi_power_fill(self, layer_id: int, tr_manager: TrackManager, strap_list: List[Union[WireArray, List[WireArray]]],
+    def do_multi_power_fill(self, layer_id: int, tr_manager: TrackManager, sup_list: List[Union[WireArray, List[WireArray]]],
                             bound_box: Optional[BBox] = None, x_margin: int = 0, y_margin: int = 0,
                             uniform_grid: bool = False) -> List[List[WireArray]]:
-        """Draw power fill on the given layer. Accepts as many different supply nets as provided."""
+        """Draw power fill on the given layer. Accepts as many different supply nets as provided.
+
+        Parameters
+        ----------
+        layer_id : int
+            the layer ID on which to draw power fill.
+        tr_manager : TrackManager
+            the TrackManager object.
+        sup_list : List[Union[WireArray, List[WireArray]]]
+            a list of supply wires to draw power fill for.
+        bound_box : Optional[BBox]
+            bound box over which to draw the power fill
+        x_margin : int
+            keepout margin on the x-axis. Fill is centered within margin.
+        y_margin : int
+            keepout margin on the y-axis. Fill is centered within margin.
+        uniform_grid : bool
+            draw power fill on a common grid instead of dense packing.
+
+        Returns
+        -------
+        List[List[WireArray]]
+            List of the wire arrays for each supply in sup_list, given in the
+            same order as sup_list.
+        """
         if bound_box is None:
             if self.bound_box is None:
                 raise ValueError("bound_box is not set")
@@ -2715,15 +2739,15 @@ class TemplateBase(DesignMaster):
         trs = self.get_available_tracks(layer_id, tid_lo=tr_bot, tid_hi=tr_top, lower=lower, upper=upper,
                                         width=fill_width, sep=fill_space, sep_margin=sep_margin,
                                         uniform_grid=uniform_grid)
-        all_wars = [[] for _ in range(len(strap_list))]
+        all_wars = [[] for _ in range(len(sup_list))]
         htr_sep = HalfInt.convert(fill_space).dbl_value
-        if len(trs) < len(strap_list):
+        if len(trs) < len(sup_list):
             raise ValueError('Not enough available tracks to fill for all provided supplies')
         for ncur, tr_idx in enumerate(trs):
             warr = self.add_wires(layer_id, tr_idx, lower, upper, width=fill_width)
             _ncur = HalfInt.convert(tr_idx).dbl_value // htr_sep if uniform_grid else ncur
-            all_wars[_ncur % len(strap_list)].append(warr)
-        for top_warr, bot_warr in zip(strap_list, all_wars):
+            all_wars[_ncur % len(sup_list)].append(warr)
+        for top_warr, bot_warr in zip(sup_list, all_wars):
             self.draw_vias_on_intersections(top_warr, bot_warr)
         return all_wars
 
