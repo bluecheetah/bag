@@ -887,7 +887,8 @@ class BagProject:
         static_info: str = specs.get('static_info', '')
         if static_info:
             if not extract:
-                raise ValueError('Currently we only support extracted views of static cells, so please use "-x".')
+                raise ValueError('Only extracted views of static cells are supported. Since DUT is static, '
+                                 'please use "-x".')
             specs_list = [dict(
                 static_info=static_info,
             )]
@@ -910,6 +911,7 @@ class BagProject:
         # harnesses
         harness_specs_list: Sequence[Mapping[str, Any]] = specs.get('harness_specs_list', [])
         for _specs in harness_specs_list:
+            _extract: bool = _specs.get('extract', extract)
             _gen_specs_file: str = _specs.get('gen_specs_file', '')
             if _gen_specs_file:
                 _gen_specs: Mapping[str, Any] = read_yaml(_gen_specs_file)
@@ -919,18 +921,20 @@ class BagProject:
                 _params_key = 'dut_params'
             _static_info: str = _specs.get('static_info', '')
             if _static_info:
-                if not extract:
-                    raise ValueError('Currently we only support extracted views of static cells, so please use "-x".')
+                if not _extract:
+                    print('Only extracted views of static cells are supported. Since harness is static, '
+                          'it will be extracted.')
                 specs_list.append(dict(
                     static_info=_static_info,
+                    extract=True,
                 ))
             else:
                 specs_list.append(dict(
                     impl_cell=_gen_specs['impl_cell'],
                     dut_cls=_gen_specs.get('dut_class') or _gen_specs['lay_class'],
                     dut_params=_gen_specs[_params_key],
-                    extract=extract,
-                    export_lay=gen_cell_dut & extract,
+                    extract=_extract,
+                    export_lay=gen_cell_dut & _extract,
                 ))
 
         meas_rel_dir: str = specs.get('meas_rel_dir', '')
