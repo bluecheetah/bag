@@ -43,7 +43,8 @@ class BlackBoxTemplate(TemplateBase):
         )
 
     def get_layout_basename(self) -> str:
-        return self.params['cell_name']
+        cell_name: str = self.params['cell_name']
+        return f'BlackBox_{cell_name}'
 
     def draw_layout(self) -> None:
         lib_name: str = self.params['lib_name']

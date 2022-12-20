@@ -55,6 +55,8 @@ from bag.util.search import BinaryIterator
 
 import abc
 from itertools import product
+import os
+from pathlib import Path
 
 from pybag.enum import (
     PathStyle, BlockageType, BoundaryType, DesignOutput, Orient2D, SupplyWrapMode,
@@ -204,6 +206,7 @@ class TemplateBase(DesignMaster):
         self._cell_boundary_added: bool = False
         self._instances: Dict[str, PyLayInstance] = {}
         self._use_color: bool = False
+        self._blackbox_gds: List[Path] = []
 
         # public attributes
         self.prim_top_layer: Optional[int] = None
@@ -227,6 +230,10 @@ class TemplateBase(DesignMaster):
 
         # create Cython wrapper object
         self._layout: PyLayCellView = PyLayCellView(self._grid, self._tr_colors, self.cell_name)
+
+    @property
+    def blackbox_gds(self) -> List[Path]:
+        return self._blackbox_gds
 
     @classmethod
     def get_hidden_params(cls) -> Dict[str, Any]:
@@ -738,6 +745,9 @@ class TemplateBase(DesignMaster):
         if params:
             raise ValueError("layout pcells not supported yet; see developer")
 
+        blackbox_gds: Path = Path(os.environ['BAG_TECH_CONFIG_DIR']) / 'blackbox_gds' / lib_name / f'{cell_name}.gds'
+        if blackbox_gds not in self._blackbox_gds:
+            self._blackbox_gds.append(blackbox_gds)
         return self._layout.add_prim_instance(lib_name, cell_name, view_name, inst_name, xform,
                                               nx, ny, spx, spy, commit)
 

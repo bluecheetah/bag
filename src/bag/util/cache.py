@@ -58,7 +58,7 @@ from itertools import chain
 
 from pybag.enum import DesignOutput, SupplyWrapMode
 from pybag.core import (
-    implement_yaml, implement_netlist, implement_gds, SUPPLY_SUFFIX, PySchCellView
+    implement_yaml, implement_netlist, implement_gds, SUPPLY_SUFFIX, PySchCellView, read_gds, make_tr_colors
 )
 
 from ..env import get_netlist_setup_file, get_gds_layer_map, get_gds_object_map
@@ -694,9 +694,24 @@ class MasterDB(abc.ABC):
             self._batch_output_helper(info_dict, master, rename, reverse_rename, netlist_used_names)
         end = time.time()
 
-        content_list = [master.get_content(output, rename, prefix, suffix, shell,
-                                           exact_cell_names, supply_wrap_mode)
-                        for master in info_dict.values()]
+        content_list = []
+        for master in info_dict.values():
+            if output is DesignOutput.GDS:
+                lay_map = get_gds_layer_map()
+                obj_map = get_gds_object_map()
+                tr_colors = make_tr_colors(self.tech_info)
+                if master.blackbox_gds:
+                    for _path in master.blackbox_gds:
+                        if _path.is_file():
+                            _gds_in = read_gds(str(_path), lay_map, obj_map, self._prj.grid, tr_colors)
+                        else:
+                            raise ValueError(f'Non existent gds file: {str(_path)}')
+                        for _item in _gds_in:
+                            _tuple = (_item.cell_name, _item)
+                            if _tuple not in content_list:
+                                content_list.append(_tuple)
+            content_list.append(master.get_content(output, rename, prefix, suffix, shell,
+                                                   exact_cell_names, supply_wrap_mode))
 
         if debug:
             print(f'master content retrieval took {end - start:.4g} seconds')
