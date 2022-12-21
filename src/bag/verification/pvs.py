@@ -80,6 +80,9 @@ class PVS(VirtuosoChecker):
     source_added_file : str
         the Calibre source.added file location.  Environment variable is supported.
         If empty (default), this is not configured.
+    import_ref_lib : str
+        the import reference libraries list file location.  Environment variable is supported.
+        If empty (default), this is not configured.
     cancel_timeout_ms : int
         cancel timeout in milliseconds.
     enable_color : bool
@@ -89,10 +92,10 @@ class PVS(VirtuosoChecker):
     def __init__(self, tmp_dir: str, root_dir: Dict[str, str], template: Dict[str, str],
                  env_vars: Dict[str, Dict[str, str]], link_files: Dict[str, List[str]],
                  params: Dict[str, Dict[str, Any]],
-                 lvs_cmd: str = 'pvs', max_workers: int = 0, source_added_file: str = '',
+                 lvs_cmd: str = 'pvs', max_workers: int = 0, source_added_file: str = '', import_ref_lib: str = '',
                  cancel_timeout_ms: int = 10000, enable_color: bool = False, **kwargs: Dict[str, Any]) -> None:
         VirtuosoChecker.__init__(self, tmp_dir, root_dir, template, env_vars, link_files,
-                                 params, max_workers, source_added_file, cancel_timeout_ms,
+                                 params, max_workers, source_added_file, import_ref_lib, cancel_timeout_ms,
                                  enable_color, **kwargs)
 
         self._lvs_cmd = lvs_cmd

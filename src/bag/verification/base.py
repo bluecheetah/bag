@@ -217,6 +217,31 @@ class Checker(abc.ABC):
         return False, ''
 
     @abc.abstractmethod
+    async def async_import_layout(self, in_file: str, lib_name: str, cell_name: str, view_name: str = 'layout',
+                                  params: Optional[Dict[str, Any]] = None, **kwargs: Any) -> str:
+        """A coroutine for importing layout.
+
+        Parameters
+        ----------
+        in_file : str
+            input file name.
+        lib_name : str
+            library name.
+        cell_name : str
+            cell name.
+        view_name : str
+            layout view name.
+        params : Optional[Dict[str, Any]]
+            optional export parameter values.
+
+        Returns
+        -------
+        log_fname : str
+            log file name.
+        """
+        return ''
+
+    @abc.abstractmethod
     async def async_export_layout(self, lib_name: str, cell_name: str, out_file: str, view_name: str = 'layout',
                                   params: Optional[Dict[str, Any]] = None, **kwargs: Any) -> str:
         """A coroutine for exporting layout.
@@ -475,6 +500,38 @@ class SubProcessChecker(Checker, abc.ABC):
         return []
 
     @abc.abstractmethod
+    def setup_import_layout(self, in_file: str, lib_name: str, cell_name: str,
+                            view_name: str = 'layout', params: Optional[Dict[str, Any]] = None
+                            ) -> ProcInfo:
+        """This method performs any setup necessary to import layout.
+
+        Parameters
+        ----------
+        in_file : str
+            input file name.
+        lib_name : str
+            library name.
+        cell_name : str
+            cell name.
+        view_name : str
+            layout view name.
+        params : Optional[Dict[str, Any]]
+            optional export parameter values.
+
+        Returns
+        -------
+        args : Union[str, Sequence[str]]
+            command to run, as string or list of string arguments.
+        log : str
+            log file name.
+        env : Optional[Dict[str, str]]
+            environment variable dictionary.  None to inherit from parent.
+        cwd : Optional[str]
+            working directory path.  None to inherit from parent.
+        """
+        return '', '', None, None
+
+    @abc.abstractmethod
     def setup_export_layout(self, lib_name: str, cell_name: str, out_file: str,
                             view_name: str = 'layout', params: Optional[Dict[str, Any]] = None
                             ) -> ProcInfo:
@@ -570,6 +627,13 @@ class SubProcessChecker(Checker, abc.ABC):
             return await self._manager.async_new_subprocess_flow(flow_info, **(subproc_options or {}))
         else:
             return gds_equal(gds_file, ref_file), ''
+
+    async def async_import_layout(self, in_file: str, lib_name: str, cell_name: str, view_name: str = 'layout',
+                                  params: Optional[Dict[str, Any]] = None,
+                                  subproc_options: Optional[Dict[str, Any]] = None, **kwargs: Any) -> str:
+        proc_info = self.setup_import_layout(in_file, lib_name, cell_name, view_name, params)
+        await self._manager.async_new_subprocess(*proc_info, **(subproc_options or {}))
+        return proc_info[1]
 
     async def async_export_layout(self, lib_name: str, cell_name: str, out_file: str, view_name: str = 'layout',
                                   params: Optional[Dict[str, Any]] = None,

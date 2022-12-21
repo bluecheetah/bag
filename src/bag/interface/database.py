@@ -691,6 +691,36 @@ class DbAccess(InterfaceBase, abc.ABC):
             raise ans
         return ans
 
+    def import_layout(self, in_file: str, lib_name: str, cell_name: str, **kwargs: Any) -> str:
+        """Import layout.
+
+        Parameters
+        ----------
+        in_file : str
+            input file name.
+        lib_name : str
+            library name.
+        cell_name : str
+            cell name.
+        **kwargs : Any
+            optional keyword arguments.  See Checker class for details.
+
+        Returns
+        -------
+        log_fname : str
+            log file name.  Empty if task cancelled.
+        """
+        self.create_library(lib_name)
+        coro = self.async_import_layout(in_file, lib_name, cell_name, **kwargs)
+        results = batch_async_task([coro])
+        if results is None:
+            return ''
+
+        ans = results[0]
+        if isinstance(ans, Exception):
+            raise ans
+        return ans
+
     def export_layout(self, lib_name: str, cell_name: str, out_file: str, **kwargs: Any) -> str:
         """Export layout.
 
@@ -721,7 +751,7 @@ class DbAccess(InterfaceBase, abc.ABC):
         return ans
 
     def export_schematic(self, lib_name: str, cell_name: str, out_file: str, **kwargs: Any) -> str:
-        """Export layout.
+        """Export schematic.
 
         Parameters
         ----------
@@ -841,8 +871,31 @@ class DbAccess(InterfaceBase, abc.ABC):
             return gds_equal(gds_file, ref_file), ''
         return await self.checker.async_run_lvl(gds_file, ref_file, **kwargs)
 
-    async def async_export_layout(self, lib_name: str, cell_name: str,
-                                  out_file: str, **kwargs: Any) -> str:
+    async def async_import_layout(self, in_file: str, lib_name: str, cell_name: str, **kwargs: Any) -> str:
+        """Import layout.
+
+        Parameters
+        ----------
+        in_file : str
+            input file name.
+        lib_name : str
+            library name.
+        cell_name : str
+            cell name.
+        **kwargs : Any
+            optional keyword arguments.  See Checker class for details.
+
+        Returns
+        -------
+        log_fname : str
+            log file name.  Empty if task cancelled.
+        """
+        if self.checker is None:
+            raise Exception('layout import is disabled.')
+
+        return await self.checker.async_import_layout(in_file, lib_name, cell_name, **kwargs)
+
+    async def async_export_layout(self, lib_name: str, cell_name: str, out_file: str, **kwargs: Any) -> str:
         """Export layout.
 
         Parameters
@@ -866,8 +919,7 @@ class DbAccess(InterfaceBase, abc.ABC):
 
         return await self.checker.async_export_layout(lib_name, cell_name, out_file, **kwargs)
 
-    async def async_export_schematic(self, lib_name: str, cell_name: str,
-                                     out_file: str, **kwargs: Any) -> str:
+    async def async_export_schematic(self, lib_name: str, cell_name: str, out_file: str, **kwargs: Any) -> str:
         if self.checker is None:
             raise Exception('schematic export is disabled.')
 

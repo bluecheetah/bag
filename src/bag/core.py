@@ -1270,6 +1270,27 @@ class BagProject:
             return self._lef.generate_lef(impl_lib, impl_cell, verilog_path, lef_path, run_path,
                                           **options)
 
+    def import_layout(self, in_file: str, lib_name: str, cell_name: str, **kwargs: Any) -> str:
+        """import layout.
+
+        Parameters
+        ----------
+        in_file : str
+            input file name.
+        lib_name : str
+            library name.
+        cell_name : str
+            cell name.
+        **kwargs : Any
+            optional keyword arguments.  See Checker class for details.
+
+        Returns
+        -------
+        log_fname : str
+            log file name.  Empty if task cancelled.
+        """
+        return self.impl_db.import_layout(in_file, lib_name, cell_name, **kwargs)
+
     def export_layout(self, lib_name: str, cell_name: str, out_file: str, **kwargs: Any) -> str:
         """export layout.
 

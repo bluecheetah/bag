@@ -59,7 +59,7 @@ from pybag.enum import DesignOutput
 
 from ..io import write_file
 from ..io.template import new_template_env_fs
-from ..env import get_bag_work_dir
+from ..env import get_bag_work_dir, get_gds_layer_map, get_gds_object_map
 from .base import SubProcessChecker, get_flow_config
 
 if TYPE_CHECKING:
@@ -69,7 +69,7 @@ if TYPE_CHECKING:
 class VirtuosoChecker(SubProcessChecker, ABC):
     """the base Checker class for Virtuoso.
 
-    This class implement layout/schematic export procedures.
+    This class implement layout/schematic export and import procedures.
 
     Parameters
     ----------
@@ -88,6 +88,9 @@ class VirtuosoChecker(SubProcessChecker, ABC):
     source_added_file : str
         the Calibre source.added file location.  Environment variable is supported.
         If empty (default), this is not configured.
+    import_ref_lib : str
+        the import reference libraries list file location.  Environment variable is supported.
+        If empty (default), this is not configured.
     cancel_timeout_ms : int
         cancel timeout in milliseconds.
     enable_color : bool
@@ -97,7 +100,7 @@ class VirtuosoChecker(SubProcessChecker, ABC):
     def __init__(self, tmp_dir: str, root_dir: Dict[str, str], template: Dict[str, str],
                  env_vars: Dict[str, Dict[str, str]], link_files: Dict[str, List[str]],
                  params: Dict[str, Dict[str, Any]], max_workers: int = 0,
-                 source_added_file: str = '', cancel_timeout_ms: int = 10000,
+                 source_added_file: str = '', import_ref_lib: str = '', cancel_timeout_ms: int = 10000,
                  enable_color: bool = False, **kwargs: Dict[str, Any]) -> None:
 
         cancel_timeout = cancel_timeout_ms / 1e3
@@ -108,6 +111,7 @@ class VirtuosoChecker(SubProcessChecker, ABC):
         self._bag_work_dir = get_bag_work_dir()
         self._strm_params = dict(enable_color=enable_color)
         self._temp_env_ctrl = new_template_env_fs()
+        self._import_ref_lib = import_ref_lib
 
     @property
     def bag_work_dir(self) -> str:
@@ -199,7 +203,20 @@ class VirtuosoChecker(SubProcessChecker, ABC):
         enable_color: bool = params.get('enable_color',
                                         self._strm_params.get('enable_color', False))
         square_bracket: bool = params.get('square_bracket', False)
-        output_type: DesignOutput = params.get('output_type', DesignOutput.GDS)
+
+        out_path = Path(out_file).resolve()
+        run_dir = out_path.parent
+        out_name = out_path.name
+
+        output_type: DesignOutput = params.get('output_type')
+        if not output_type:
+            # figure out output_type from out_file extension
+            if out_path.suffix.lower() == '.gds':
+                output_type = DesignOutput.GDS
+            elif out_path.suffix.lower() in ['.oas', '.oasis']:
+                output_type = DesignOutput.OASIS
+            else:
+                raise ValueError(f'Unknown layout export format: {out_path.suffix}')
 
         if output_type is DesignOutput.GDS:
             template_name = 'gds_export_config.txt'
@@ -210,9 +227,6 @@ class VirtuosoChecker(SubProcessChecker, ABC):
         else:
             raise ValueError(f'Unknown layout export format: {output_type.name}')
 
-        out_path = Path(out_file).resolve()
-        run_dir = out_path.parent
-        out_name = out_path.name
         log_file = str(run_dir / 'layout_export.log')
 
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -226,6 +240,62 @@ class VirtuosoChecker(SubProcessChecker, ABC):
                                                  run_dir=str(run_dir),
                                                  enable_color=str(enable_color).lower(),
                                                  square_bracket=str(square_bracket).lower(),
+                                                 ))
+        # run strmOut
+        ctrl_file = run_dir / 'stream_template'
+        write_file(ctrl_file, content)
+        cmd = [cmd_str, '-templateFile', str(ctrl_file)]
+        return cmd, log_file, None, self._bag_work_dir
+
+    def setup_import_layout(self, in_file: str, lib_name: str, cell_name: str,
+                            view_name: str = 'layout', params: Optional[Dict[str, Any]] = None
+                            ) -> ProcInfo:
+        if params is None:
+            params = {}
+
+        enable_color: bool = params.get('enable_color',
+                                        self._strm_params.get('enable_color', False))
+        square_bracket: bool = params.get('square_bracket', False)
+
+        in_path = Path(in_file).resolve()
+        run_dir = in_path.parent
+        in_name = in_path.name
+
+        input_type: DesignOutput = params.get('input_type')
+        if not input_type:
+            # figure out input_type from in_file extension
+            if in_path.suffix.lower() == '.gds':
+                input_type = DesignOutput.GDS
+            elif in_path.suffix.lower() in ['.oas', '.oasis']:
+                input_type = DesignOutput.OASIS
+            else:
+                raise ValueError(f'Unknown layout import format: {in_path.suffix}')
+
+        if input_type is DesignOutput.GDS:
+            template_name = 'gds_import_config.txt'
+            cmd_str = 'strmin'
+        elif input_type is DesignOutput.OASIS:
+            template_name = 'oasis_import_config.txt'
+            cmd_str = 'oasisin'
+        else:
+            raise ValueError(f'Unknown layout import format: {input_type.name}')
+
+        log_file = str(run_dir / 'layout_import.log')
+
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        # fill in stream in configuration file.
+        content = self.render_file_template(template_name,
+                                            dict(lib_name=lib_name,
+                                                 cell_name=cell_name,
+                                                 view_name=view_name,
+                                                 input_name=in_name,
+                                                 run_dir=str(run_dir),
+                                                 enable_color=str(enable_color).lower(),
+                                                 square_bracket=str(square_bracket).lower(),
+                                                 import_ref_lib=self._import_ref_lib,
+                                                 layer_map=get_gds_layer_map(),
+                                                 object_map=get_gds_object_map(),
                                                  ))
         # run strmOut
         ctrl_file = run_dir / 'stream_template'
