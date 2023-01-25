@@ -241,7 +241,7 @@ class VirtuosoChecker(SubProcessChecker, ABC):
                                                  enable_color=str(enable_color).lower(),
                                                  square_bracket=str(square_bracket).lower(),
                                                  ))
-        # run strmOut
+        # run strmOut or oasisOut
         ctrl_file = run_dir / 'stream_template'
         write_file(ctrl_file, content)
         cmd = [cmd_str, '-templateFile', str(ctrl_file)]
@@ -297,7 +297,7 @@ class VirtuosoChecker(SubProcessChecker, ABC):
                                                  layer_map=get_gds_layer_map(),
                                                  object_map=get_gds_object_map(),
                                                  ))
-        # run strmOut
+        # run strmIn or oasisIn
         ctrl_file = run_dir / 'stream_template'
         write_file(ctrl_file, content)
         cmd = [cmd_str, '-templateFile', str(ctrl_file)]
