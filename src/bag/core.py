@@ -228,37 +228,41 @@ class BagProject:
         """
         return self.impl_db.get_cells_in_library(lib_name)
 
-    def make_template_db(self, impl_lib: str, **kwargs: Any) -> TemplateDB:
+    def make_template_db(self, log_file: str, impl_lib: str, **kwargs: Any) -> TemplateDB:
         """Create and return a new TemplateDB instance.
 
         Parameters
         ----------
+        log_file: str
+            the log file path.
         impl_lib : str
             the library name to put generated layouts in.
         **kwargs : Any
             optional TemplateDB parameters.
         """
-        return TemplateDB(self.grid, impl_lib, prj=self, **kwargs)
+        return TemplateDB(self.grid, impl_lib, log_file, prj=self, **kwargs)
 
-    def make_module_db(self, impl_lib: str, **kwargs: Any) -> ModuleDB:
+    def make_module_db(self, log_file: str, impl_lib: str, **kwargs: Any) -> ModuleDB:
         """Create and return a new ModuleDB instance.
 
         Parameters
         ----------
+        log_file: str
+            the log file path.
         impl_lib : str
             the library name to put generated layouts in.
         **kwargs : Any
             optional ModuleDB parameters.
         """
-        return ModuleDB(self.tech_info, impl_lib, prj=self, **kwargs)
+        return ModuleDB(self.tech_info, impl_lib, log_file, prj=self, **kwargs)
 
     def make_dsn_db(self, root_dir: Path, log_file: str, impl_lib: str,
                     sch_db: Optional[ModuleDB] = None, lay_db: Optional[TemplateDB] = None,
                     **kwargs: Any) -> DesignDB:
         if sch_db is None:
-            sch_db = self.make_module_db(impl_lib)
+            sch_db = self.make_module_db(log_file, impl_lib)
         if lay_db is None:
-            lay_db = self.make_template_db(impl_lib)
+            lay_db = self.make_template_db(log_file, impl_lib)
 
         dsn_db = DesignDB(root_dir, log_file, self.impl_db, self.sim_access.netlist_type,
                           sch_db, lay_db, **kwargs)
@@ -405,6 +409,7 @@ class BagProject:
             lay_type_list: List[DesignOutput] = [DesignOutput[v] for v in lay_type_specs]
 
         root_path = self.get_root_path(root_dir, use_sim_path=False)
+        log_file = str(root_path / 'gen.log')
 
         gen_lay = gen_lay and has_lay
         gen_model = gen_model and model_params
@@ -419,8 +424,7 @@ class BagProject:
             raise ValueError('Conflict between layout file type and layout file name.')
         if has_lay:
             if lay_db is None:
-                lay_db = self.make_template_db(impl_lib, name_prefix=name_prefix,
-                                               name_suffix=name_suffix)
+                lay_db = self.make_template_db(log_file, impl_lib, name_prefix=name_prefix, name_suffix=name_suffix)
 
             print('computing layout...')
             lay_master: TemplateBase = lay_db.new_template(lay_cls, params=params)
@@ -494,7 +498,7 @@ class BagProject:
 
         if gen_sch:
             if sch_db is None:
-                sch_db = self.make_module_db(impl_lib, name_prefix=name_prefix,
+                sch_db = self.make_module_db(log_file, impl_lib, name_prefix=name_prefix,
                                              name_suffix=name_suffix)
 
             print('computing schematic...')
@@ -751,6 +755,7 @@ class BagProject:
             tb_params['dut_cell'] = impl_cell
 
         root_path = self.get_root_path(root_dir, use_sim_path=True)
+        log_file = str(root_path / 'sim.log')
 
         netlist_type = self._sim.netlist_type
         tb_netlist_path = root_path / f'tb.{netlist_type.extension}'
@@ -762,7 +767,7 @@ class BagProject:
                 raise ValueError('impl_cell is empty.')
 
             if sch_db is None:
-                sch_db = self.make_module_db(impl_lib)
+                sch_db = self.make_module_db(log_file, impl_lib)
 
             if use_netlist:
                 use_netlist_path = Path(use_netlist)

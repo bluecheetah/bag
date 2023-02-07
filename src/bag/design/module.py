@@ -56,7 +56,7 @@ from pathlib import Path
 from itertools import zip_longest
 
 from pybag.core import PySchCellView, get_cv_header
-from pybag.enum import TermType, SigType, DesignOutput, SupplyWrapMode
+from pybag.enum import TermType, SigType, DesignOutput, SupplyWrapMode, LogLevel
 
 from ..math import float_to_si_string
 from ..util.cache import DesignMaster, Param, format_cell_name
@@ -80,14 +80,19 @@ class Module(DesignMaster):
         the design database object.
     params : Param
         the parameters dictionary.
+    log_file: str
+        the log file path.
+    log_level : LogLevel
+        the logging level.
     copy_state : Optional[Dict[str, Any]]
         If not None, set content of this master from this dictionary.
     **kwargs : Any
         optional arguments
     """
 
-    def __init__(self, yaml_fname: str, database: ModuleDB, params: Param, *,
-                 copy_state: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
+    def __init__(self, yaml_fname: str, database: ModuleDB, params: Param, log_file: str, *,
+                 copy_state: Optional[Dict[str, Any]] = None, log_level: LogLevel = LogLevel.DEBUG,
+                 **kwargs: Any) -> None:
         self._cv: Optional[PySchCellView] = None
         if copy_state:
             self._netlist_dir: Optional[Path] = copy_state['netlist_dir']
@@ -116,7 +121,7 @@ class Module(DesignMaster):
                 self.instances: Dict[str, SchInstance] = {}
 
         # initialize schematic master
-        DesignMaster.__init__(self, database, params, copy_state=copy_state, **kwargs)
+        DesignMaster.__init__(self, database, params, log_file, log_level, copy_state=copy_state, **kwargs)
 
     @classmethod
     def get_hidden_params(cls) -> Mapping[str, Any]:
