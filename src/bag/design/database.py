@@ -52,7 +52,7 @@ from pathlib import Path
 
 from jinja2 import Template
 
-from pybag.enum import DesignOutput
+from pybag.enum import DesignOutput, LogLevel
 
 from ..util.cache import MasterDB, Param
 from ..io.template import new_template_env_fs
@@ -78,17 +78,22 @@ class ModuleDB(MasterDB):
         the TechInfo instance.
     lib_name : str
         the cadence library to put all generated templates in.
+    log_file: str
+        the log file path.
     prj : Optional[BagProject]
         the BagProject instance.
     name_prefix : str
         generated schematic name prefix.
     name_suffix : str
         generated schematic name suffix.
+    log_level : LogLevel
+        the logging level.
     """
 
-    def __init__(self, tech_info: TechInfo, lib_name: str, prj: Optional[BagProject] = None,
-                 name_prefix: str = '', name_suffix: str = '') -> None:
-        MasterDB.__init__(self, lib_name, prj=prj, name_prefix=name_prefix, name_suffix=name_suffix)
+    def __init__(self, tech_info: TechInfo, lib_name: str, log_file: str, prj: Optional[BagProject] = None,
+                 name_prefix: str = '', name_suffix: str = '', log_level: LogLevel = LogLevel.DEBUG) -> None:
+        MasterDB.__init__(self, lib_name, log_file, prj=prj, name_prefix=name_prefix, name_suffix=name_suffix,
+                          log_level=log_level)
 
         self._tech_info = tech_info
         self._temp_env = new_template_env_fs()

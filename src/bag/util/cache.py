@@ -55,8 +55,7 @@ import abc
 import time
 from collections import OrderedDict
 from itertools import chain
-
-from pybag.enum import DesignOutput, SupplyWrapMode
+from pybag.enum import DesignOutput, SupplyWrapMode, LogLevel
 from pybag.core import (
     implement_yaml, implement_netlist, implement_gds, SUPPLY_SUFFIX, PySchCellView, read_gds, make_tr_colors
 )
@@ -64,6 +63,7 @@ from pybag.core import (
 from ..env import get_netlist_setup_file, get_gds_layer_map, get_gds_object_map
 from .search import get_new_name
 from .immutable import Param, to_immutable
+from .logging import LoggingBase
 
 if TYPE_CHECKING:
     from ..core import BagProject
@@ -85,7 +85,7 @@ def format_cell_name(cell_name: str, rename_dict: Dict[str, str], name_prefix: s
     return ans
 
 
-class DesignMaster(abc.ABC):
+class DesignMaster(LoggingBase, metaclass=abc.ABCMeta):
     """A design master instance.
 
     This class represents a design master in the design database.
@@ -96,6 +96,10 @@ class DesignMaster(abc.ABC):
         the master database.
     params : Param
         the parameters dictionary.
+    log_file: str
+        the log file path.
+    log_level : LogLevel
+        the logging level.
     key: Any
         If not None, the unique ID for this master instance.
     copy_state : Optional[Dict[str, Any]]
@@ -107,8 +111,10 @@ class DesignMaster(abc.ABC):
         the parameters dictionary.
     """
 
-    def __init__(self, master_db: MasterDB, params: Param, *,
+    def __init__(self, master_db: MasterDB, params: Param, log_file: str,
+                 log_level: LogLevel = LogLevel.DEBUG, *,
                  key: Any = None, copy_state: Optional[Dict[str, Any]] = None) -> None:
+        LoggingBase.__init__(self, self.__class__.__name__, log_file, log_level=log_level)
         self._master_db = master_db
         self._cell_name = ''
 
@@ -364,7 +370,7 @@ class DesignMaster(abc.ABC):
         return iter(self._children)
 
 
-class MasterDB(abc.ABC):
+class MasterDB(LoggingBase, metaclass=abc.ABCMeta):
     """A database of existing design masters.
 
     This class keeps track of existing design masters and maintain design dependency hierarchy.
@@ -373,16 +379,21 @@ class MasterDB(abc.ABC):
     ----------
     lib_name : str
         the library to put all generated templates in.
+    log_file: str
+        the log file path.
     prj : Optional[BagProject]
         the BagProject instance.
     name_prefix : str
         generated master name prefix.
     name_suffix : str
         generated master name suffix.
+    log_level : LogLevel
+        the logging level.
     """
 
-    def __init__(self, lib_name: str, prj: Optional[BagProject] = None, name_prefix: str = '',
-                 name_suffix: str = '') -> None:
+    def __init__(self, lib_name: str, log_file: str, prj: Optional[BagProject] = None,
+                 name_prefix: str = '', name_suffix: str = '', log_level: LogLevel = LogLevel.DEBUG) -> None:
+        LoggingBase.__init__(self, self.__class__.__name__, log_file, log_level=log_level)
 
         self._prj = prj
         self._lib_name = lib_name
@@ -546,7 +557,7 @@ class MasterDB(abc.ABC):
 
         if debug:
             print('finalizing master')
-        master = gen_cls(self, master_params, key=key, **kwargs)
+        master = gen_cls(self, master_params, log_file=self.log_file, key=key, log_level=self.log_level, **kwargs)
         start = time.time()
         master.finalize()
         end = time.time()

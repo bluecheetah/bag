@@ -60,7 +60,7 @@ from pathlib import Path
 
 from pybag.enum import (
     PathStyle, BlockageType, BoundaryType, DesignOutput, Orient2D, SupplyWrapMode,
-    Orientation, Direction, MinLenMode, RoundMode, PinMode, Direction2D
+    Orientation, Direction, MinLenMode, RoundMode, PinMode, Direction2D, LogLevel
 )
 from pybag.core import (
     BBox, BBoxArray, PyLayCellView, Transform, PyLayInstRef, PyPath, PyBlockage, PyBoundary,
@@ -101,17 +101,22 @@ class TemplateDB(MasterDB):
         the default RoutingGrid object.
     lib_name : str
         the cadence library to put all generated templates in.
+    log_file: str
+        the log file path.
     prj : Optional[BagProject]
         the BagProject instance.
     name_prefix : str
         generated layout name prefix.
     name_suffix : str
         generated layout name suffix.
+    log_level : LogLevel
+        the logging level.
     """
 
-    def __init__(self, routing_grid: RoutingGrid, lib_name: str, prj: Optional[BagProject] = None,
-                 name_prefix: str = '', name_suffix: str = '') -> None:
-        MasterDB.__init__(self, lib_name, prj=prj, name_prefix=name_prefix, name_suffix=name_suffix)
+    def __init__(self, routing_grid: RoutingGrid, lib_name: str, log_file: str, prj: Optional[BagProject] = None,
+                 name_prefix: str = '', name_suffix: str = '', log_level: LogLevel = LogLevel.DEBUG) -> None:
+        MasterDB.__init__(self, lib_name, log_file, prj=prj, name_prefix=name_prefix, name_suffix=name_suffix,
+                          log_level=log_level)
 
         self._grid = routing_grid
         self._tr_colors = make_tr_colors(self._grid.tech_info)
@@ -184,6 +189,10 @@ class TemplateBase(DesignMaster):
         the template database.
     params : Param
         the parameter values.
+    log_file: str
+        the log file path.
+    log_level : LogLevel
+        the logging level.
     **kwargs : Any
         dictionary of the following optional parameters:
 
@@ -191,10 +200,11 @@ class TemplateBase(DesignMaster):
             the routing grid to use for this template.
     """
 
-    def __init__(self, temp_db: TemplateDB, params: Param, **kwargs: Any) -> None:
+    def __init__(self, temp_db: TemplateDB, params: Param, log_file: str,
+                 log_level: LogLevel = LogLevel.DEBUG, **kwargs: Any) -> None:
 
         # add hidden parameters
-        DesignMaster.__init__(self, temp_db, params, **kwargs)
+        DesignMaster.__init__(self, temp_db, params, log_file, log_level, **kwargs)
 
         # private attributes
         self._size: Optional[SizeType] = None
