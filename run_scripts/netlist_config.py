@@ -531,6 +531,25 @@ netlist_map_default = {
             },
             'va': '${CDSHOME}/tools/dfII/samples/artist/ahdlLib/comparator/veriloga/veriloga.va',
         },
+        'rand_bit_stream': {
+            'lib_name': 'ahdlLib',
+            'cell_name': 'rand_bit_stream',
+            'in_terms': [],
+            'io_terms': [],
+            'is_prim': True,
+            'nets': [],
+            'out_terms': ['vout'],
+            'props': {
+                'tperiod': [3, ''],
+                'seed': [3, ''],
+                'vlogic_high': [3, ''],
+                'vlogic_low': [3, ''],
+                'tdel': [3, ''],
+                'trise': [3, ''],
+                'tfall': [3, ''],
+            },
+            'va': '${CDSHOME}/tools/dfII/samples/artist/ahdlLib/rand_bit_stream/veriloga/veriloga.va',
+        },
     },
 }
 
