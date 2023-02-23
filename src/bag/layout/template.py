@@ -2906,6 +2906,10 @@ class TemplateBase(DesignMaster):
 
         return warr
 
+    @property
+    def has_guard_ring(self) -> bool:
+        return self._grid.tech_info.has_guard_ring
+
 
 def _update_device_fill_area(lookup: RTree, ed: Param, inst_box: BBox, inst_edges: TemplateEdgeInfo,
                              sp_box: BBox, sp_edges: Optional[TemplateEdgeInfo]) -> None:

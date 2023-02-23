@@ -739,3 +739,8 @@ class TechInfo(PyTech):
 
         # step 4: return answer
         return num_par, num_ser, wopt_unit, lopt_unit
+
+    @property
+    def has_guard_ring(self) -> bool:
+        """Returns True if this process has guard rings"""
+        return True
