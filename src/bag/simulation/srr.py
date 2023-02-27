@@ -93,7 +93,7 @@ def srr_dataset_to_analysis_data(ds: pysrrDataSet, rtol: float, atol: float) -> 
     if is_md:
         swp_combo = {var: swp_vals[i] for i, var in enumerate(swp_vars)}
     else:
-        swp_combo = {var: swp_combo_list for i, var in enumerate(swp_vars)}
+        swp_combo = {var: swp_combo_list for var in swp_vars}
         swp_shape = (swp_len, )
     data.update(swp_combo)
 
@@ -114,19 +114,34 @@ def srr_dataset_to_analysis_data(ds: pysrrDataSet, rtol: float, atol: float) -> 
                     new_swp_vars.append(sig_xname)
         else:  # Parametric data
             sig_xname = sig_data[0]['xname']
-            sig_y = np.stack([sig_data[i]['y'] for i in range(len(sig_data))])
-            if sig_xname in swp_vars:  # In some cases, the last sweep variable becomes the x axis of this signal
-                assert sig_xname == swp_vars[-1]
-                data_shape = swp_shape
-            else:
-                data_shape = tuple((*swp_shape, sig_y.shape[-1]))
+            len_sig_data = len(sig_data)
+            yvecs = [sig_data[i]['y'] for i in range(len_sig_data)]
+            sub_dims = tuple(yvec.shape[0] for yvec in yvecs)
+            max_dim = max(sub_dims)
+            is_same_len = all((sub_dims[i] == sub_dims[0] for i in range(1, len_sig_data)))
+            data_shape = tuple((*swp_shape, max_dim))
+            if not is_same_len:
+                yvecs_padded = [np.pad(yvec, (0, max_dim - dim), constant_values=np.nan)
+                                for yvec, dim in zip(yvecs, sub_dims)]
+                sig_y = np.stack(yvecs_padded)
                 if sig_xname not in data:
-                    data[sig_xname] = sig_data[0]['x']
                     new_swp_vars.append(sig_xname)
+                    xvecs_padded = [np.pad(sub_sig_data['x'], (0, max_dim - dim), constant_values=np.nan)
+                                    for sub_sig_data, dim in zip(sig_data, sub_dims)]
+                    data[sig_xname] = np.reshape(np.stack(xvecs_padded), data_shape)
+            else:
+                sig_y = np.stack(yvecs)
+                if sig_xname in swp_vars:  # In some cases, the last sweep variable becomes the x axis of this signal
+                    assert sig_xname == swp_vars[-1]
+                    data_shape = swp_shape
+                else:
+                    if sig_xname not in data:
+                        new_swp_vars.append(sig_xname)
+                        data[sig_xname] = sig_data[0]['x']
         try:
             sig_y_reshaped = np.reshape(sig_y, data_shape)
         except ValueError as e:  # Missing some data so reshaping fails
-            raise SRRDatabaseNotReady(str(e))
+            raise SRRDatabaseNotReady from e
         data[sig_name.replace('/', '.')] = sig_y_reshaped
     return AnalysisData(['corner'] + new_swp_vars, data, is_md)
 
@@ -147,7 +162,7 @@ def get_sim_env(ds: pysrrDataSet) -> str:
 
     ds_name = ds._name
     ana_type = ds.getAnalysisType()
-    sim_env_fmt = rf'[a-zA-Z0-9]+_[a-zA-Z0-9]+'
+    sim_env_fmt = r'[a-zA-Z0-9]+_[a-zA-Z0-9]+'
     if ana_type.endswith(('.pss', '.pnoise')):
         ana_type_end = ana_type.split('.')[-1]
         matched = re.search(rf'__+{ana_type_end}__+({sim_env_fmt})__+.*-', ds_name)
@@ -288,4 +303,4 @@ def srr_to_sim_data(srr_path: Union[str, Path], rtol: float, atol: float) -> Sim
             del db
             time.sleep(10)
 
-    raise SRRtoSimDataError(f'Error occurred while converting SRR dataset. Maximum number of tries reached.')
+    raise SRRtoSimDataError('Error occurred while converting SRR dataset. Maximum number of tries reached.')
