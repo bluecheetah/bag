@@ -24,9 +24,11 @@ from copy import deepcopy
 
 from pybag.enum import LogLevel
 
+from ..core import BagProject
 from ..util.importlib import import_class
 from ..util.logging import LoggingBase
 from ..io.file import write_yaml
+from ..io import read_yaml
 from ..concurrent.core import batch_async_task
 from ..design.module import Module
 from ..layout.tech import TechInfo
@@ -37,10 +39,6 @@ from .measure import MeasurementManager
 from .cache import SimulationDB, SimResults, MeasureResult, DesignInstance
 
 from bag3_digital.measurement.liberty.io import generate_liberty
-from bag.io import read_yaml
-
-if TYPE_CHECKING:
-    from ..core import BagProject
 
 
 class DesignerBase(LoggingBase, abc.ABC):
@@ -88,6 +86,26 @@ class DesignerBase(LoggingBase, abc.ABC):
     @classmethod
     def get_default_param_values(cls) -> Dict[str, Any]:
         return {}
+
+    @classmethod
+    def get_dut_class_info(cls, gen_specs: Mapping[str, Any]) -> Tuple[bool, Union[Type[TemplateBase], Type[Module]]]:
+        """Returns information about the DUT generator class.
+
+        Parameters
+        ----------
+        specs : Param
+            The generator specs.
+
+        Returns
+        -------
+        is_lay : bool
+            True if the DUT generator is a layout generator, False if schematic generator.
+
+        dut_cls : Union[Type[TemplateBase], Type[Module]]
+            The DUT generator class.
+        """
+        is_lay, lay_cls, sch_cls = BagProject.get_dut_class_info(gen_specs)
+        return is_lay, lay_cls or sch_cls
 
     @classmethod
     def design_cell(cls, prj: BagProject, specs: Mapping[str, Any], extract: bool = False,
