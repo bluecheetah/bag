@@ -287,6 +287,49 @@ class BagProject:
             root_path = self._sim._dir_path / root_path
         return root_path.resolve()
 
+    @staticmethod
+    def get_dut_class_info(specs: Mapping[str, Any]) -> Tuple[bool, Optional[Type[TemplateBase]],
+                                                              Optional[Type[Module]]]:
+        """Returns information about the DUT generator class.
+
+        Parameters
+        ----------
+        specs : Param
+            The generator specs.
+
+        Returns
+        -------
+        is_lay : bool
+            True if the DUT generator is a layout generator, False if schematic generator.
+
+        lay_cls : Optional[Type[TemplateBase]]
+            The DUT layout generator class, if applicable. If schematic generator, then evaluates to None.
+
+        sch_cls : Optional[Type[Module]]
+            The DUT schematic generator class. If sch_class is not specified in specs, then evaluates to None.
+        """
+
+        dut_str: Union[str, Type[TemplateBase], Type[Module]] = specs.get('dut_class') or specs.get('lay_class', '')
+        sch_str: Union[str, Type[Module]] = specs.get('sch_class', '')
+        dut_cls = import_class(dut_str)
+        if issubclass(dut_cls, TemplateBase):
+            lay_cls = dut_cls
+            is_lay = True
+        elif issubclass(dut_cls, Module):
+            lay_cls = None
+            sch_str = dut_cls
+            is_lay = False
+        else:
+            raise ValueError(f"Invalid generator class {dut_cls.get_qualified_name()}")
+
+        if isinstance(sch_str, str):
+            # no schematic class from layout, try get it from string
+            sch_cls = cast(Type[Module], import_class(sch_str)) if sch_str else None
+        else:
+            sch_cls = sch_str
+
+        return is_lay, lay_cls, sch_cls
+
     def generate_cell(self, specs: Dict[str, Any],
                       raw: bool = False,
                       gen_lay: bool = True,
@@ -369,16 +412,7 @@ class BagProject:
             the extraction netlist.  Empty on error or if extraction is not run.
         """
         root_dir: Union[str, Path] = specs.get('root_dir', '')
-        dut_str: Union[str, Type[TemplateBase], Type[Module]] = specs.get('dut_class') or specs.get('lay_class', '')
-        sch_str: Union[str, Type[Module]] = specs.get('sch_class', '')
-        dut_cls = import_class(dut_str)
-        if issubclass(dut_cls, TemplateBase):
-            lay_cls = dut_cls
-            has_lay = True
-        else:
-            lay_cls = None
-            sch_str = dut_cls
-            has_lay = False
+        has_lay, lay_cls, sch_cls = self.get_dut_class_info(specs)
         impl_lib: str = specs['impl_lib']
         impl_cell: str = specs['impl_cell']
         params: Optional[Mapping[str, Any]] = specs.get('params', None)
@@ -471,13 +505,6 @@ class BagProject:
                 self.impl_db.export_layout(impl_lib, impl_cell, cur_file,
                                            params=export_params)
 
-        if sch_cls is None:
-            if isinstance(sch_str, str):
-                if sch_str:
-                    # no schematic class from layout, try get it from string
-                    sch_cls = cast(Type[Module], import_class(sch_str))
-            else:
-                sch_cls = sch_str
         has_sch = sch_cls is not None
 
         run_lvs = (run_lvs or run_rcx) and gen_lay and has_sch
