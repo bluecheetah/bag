@@ -450,7 +450,6 @@ class BagProject:
         run_drc = run_drc and gen_lay
 
         verilog_shell_path = root_path / f'{impl_cell}_shell.v' if gen_lef or gen_shell else None
-        sch_cls = None
         layout_ext = lay_type_list[0].extension
         layout_file = ''
         lef_options = {}
@@ -464,7 +463,7 @@ class BagProject:
             lay_master: TemplateBase = lay_db.new_template(lay_cls, params=params)
             lay_master.get_lef_options(lef_options, lef_config)
             # try getting schematic class from instance, if possible
-            sch_cls = lay_master.get_schematic_class_inst()
+            sch_cls = lay_master.get_schematic_class_inst() or sch_cls
             dut_list = [(lay_master, impl_cell)]
             print('computation done.')
 
