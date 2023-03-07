@@ -63,13 +63,44 @@ class SpectreInterface(SimProcessManager):
     tmp_dir : str
         temporary file directory for SimAccess.
     sim_config : Dict[str, Any]
-        the simulation configuration dictionary.
+        the simulation configuration dictionary. Contains the following options:
+
+        env_file : str
+            the yaml path for PVT corners.
+        use_pysrr : bool
+            True to use pysrr. Defaults to False.
+        compress : bool
+            True to compress simulation data when saving to HDF5 file. Defaults to True.
+        rtol: float
+            relative tolerance for checking if 2 simulation values are the same. Defaults to 1e-8.
+        atol: float
+            absolute tolerance for checking if 2 simulation values are the same. Defaults to 1e-22.
+        kwargs : Dict[str, Any]
+            additional spectre simulation arguments. Contains the following options:
+
+            command : str
+                the command to launch simulator. Defaults to spectre.
+            env : Optional[Dict[str, str]]
+                an optional dictionary of environment variables.  None to inherit from parent. Defaults to None.
+            run_64 : bool
+                True to run in 64-bit mode. Defaults to True.
+            format : str
+                the output raw data file format. Defaults to psfxl.
+            psfversion : str
+                the version of psfxl to use. If not specified, defaults to the simulator's default psfversion.
+            options : List[str]
+                the command line simulator options. Defaults to an empty list.
     """
 
     def __init__(self, tmp_dir: str, sim_config: Dict[str, Any]) -> None:
         SimProcessManager.__init__(self, tmp_dir, sim_config)
         self._model_setup: Dict[str, List[Tuple[str, str]]] = read_yaml(sim_config['env_file'])
         self._use_pysrr: bool = sim_config.get('use_pysrr', False)
+        self._sim_kwargs: Dict[str, Any] = sim_config.get('kwargs', {})
+        self._out_fmt: str = self._sim_kwargs.get('format', 'psfxl')
+        self._psf_version: str = self._sim_kwargs.get('psfversion', '')
+        if self._out_fmt != 'psfxl':  # clear psf_version since it's only used for psfxl
+            self._psf_version = ''
 
     @property
     def netlist_type(self) -> DesignOutput:
@@ -99,6 +130,8 @@ class SpectreInterface(SimProcessManager):
             lines = [l.rstrip() for l in f]
 
         # write simulator options
+        if self._psf_version and 'psfversion' not in sim_options:
+            sim_options = sim_options.copy(append=dict(psfversion=self._psf_version))
         if sim_options:
             sim_opt_list = ['simulatorOptions', 'options']
             for opt, val in sim_options.items():
@@ -224,7 +257,7 @@ class SpectreInterface(SimProcessManager):
         if not netlist.is_file():
             raise FileNotFoundError(f'netlist {netlist} is not a file.')
 
-        sim_kwargs: Dict[str, Any] = self.config['kwargs']
+        sim_kwargs: Dict[str, Any] = self._sim_kwargs
         compress: bool = self.config.get('compress', True)
         rtol: float = self.config.get('rtol', 1e-8)
         atol: float = self.config.get('atol', 1e-22)
@@ -232,17 +265,11 @@ class SpectreInterface(SimProcessManager):
         cmd_str: str = sim_kwargs.get('command', 'spectre')
         env: Optional[Dict[str, str]] = sim_kwargs.get('env', None)
         run_64: bool = sim_kwargs.get('run_64', True)
-        fmt: str = sim_kwargs.get('format', 'psfxl')
-        # psf_version: str = sim_kwargs.get('psfversion', '1.1')
         options = sim_kwargs.get('options', [])
 
         sim_cmd = [cmd_str, '-cols', '100', '-colslog', '100',
-                   '-format', fmt, '-raw', f'{sim_tag}.raw']
+                   '-format', self._out_fmt, '-raw', f'{sim_tag}.raw']
 
-        # Spectre 191 gives "ERROR (SPECTRE-129): Invalid command line argument '-psfversion'"
-        # if fmt == 'psfxl':
-        #     sim_cmd.append('-psfversion')
-        #     sim_cmd.append(psf_version)
         if run_64:
             sim_cmd.append('-64')
         for opt in options:
