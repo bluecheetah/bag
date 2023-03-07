@@ -911,7 +911,9 @@ def populate_res_metal(config: Dict[str, Any], netlist_map: Dict[str, Any],
         for v, lines in inc_lines.items():
             param_list = config[v.name]
             template_name = supported_formats[v]['res_metal']
-            write_res_val = config.get('write_res_val', False)
+            write_res_val: Union[bool, Dict[str, bool]] = config.get('write_res_val', False)
+            if isinstance(write_res_val, dict):
+                write_res_val: bool = write_res_val.get(v.name, False)
             new_param_list = param_list.copy()
             if write_res_val:
                 res_val = config['res_map'][idx + 1]
