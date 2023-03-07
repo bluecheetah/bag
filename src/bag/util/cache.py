@@ -124,6 +124,8 @@ class DesignMaster(LoggingBase, metaclass=abc.ABCMeta):
             self._params = copy_state['params']
             self._cell_name = copy_state['cell_name']
             self._key = copy_state['key']
+            self._log_file = copy_state['log_file']
+            self._log_level = copy_state['log_level']
         else:
             # use ordered dictionary so we have deterministic dependency order
             self._children = OrderedDict()
@@ -136,6 +138,10 @@ class DesignMaster(LoggingBase, metaclass=abc.ABCMeta):
             # update design master signature
             self._cell_name = get_new_name(self.get_master_basename(),
                                            self.master_db.used_cell_names)
+
+            # Set logging base parameters
+            self._log_file = log_file
+            self._log_level = log_level
 
     @classmethod
     def get_qualified_name(cls) -> str:
@@ -219,12 +225,15 @@ class DesignMaster(LoggingBase, metaclass=abc.ABCMeta):
             'params': new_params,
             'cell_name': self._cell_name,
             'key': self._key,
+            'log_file': self._log_file,
+            'log_level': self._log_level,
         }
 
     def get_copy_with(self: MasterType, new_params: Param) -> MasterType:
         """Returns a copy of this master instance."""
         copy_state = self.get_copy_state_with(new_params)
-        return self.__class__(self._master_db, None, copy_state=copy_state)
+        return self.__class__(self._master_db, None, log_file=copy_state['log_file'],
+                              log_level=copy_state['log_level'], copy_state=copy_state)
 
     @classmethod
     def to_immutable_id(cls, val: Any) -> Any:
