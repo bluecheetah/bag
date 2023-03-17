@@ -122,7 +122,7 @@ class SpectreInterface(SimProcessManager):
         monte_carlo = info.monte_carlo
         sim_options = info.options
         init_voltages = info.init_voltages
-        if monte_carlo is not None and (isinstance(swp_info, SetSweepInfo) or len(sim_envs) > 1):
+        if monte_carlo is not None and (isinstance(swp_info, SweepInfo) or len(sim_envs) > 1):
             raise NotImplementedError('Monte Carlo simulation not implemented for parameter sweep '
                                       'and/or process sweep')
 
