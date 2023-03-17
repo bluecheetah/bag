@@ -195,7 +195,8 @@ def combine_ana_sim_envs(ana_dict: Dict[str, AnalysisData], sim_envs: List[str])
     cur_ana_sim_envs = list(ana_dict.keys())
     assert sorted(cur_ana_sim_envs) == sorted(sim_envs), f"Expected corners {sim_envs}, got {cur_ana_sim_envs}"
 
-    if len(sim_envs) == 1:  # Single corner, nothing to combine
+    num_sim_envs = len(sim_envs)
+    if num_sim_envs == 1:  # Single corner, nothing to combine
         return ana_dict[sim_envs[0]]
 
     ana_list = [ana_dict[sim_env] for sim_env in sim_envs]  # Reorder analyses by corner
@@ -212,7 +213,7 @@ def combine_ana_sim_envs(ana_dict: Dict[str, AnalysisData], sim_envs: List[str])
         max_size = np.max(list(zip(*sizes)), -1)
         assert max_size[0] == 1
         # noinspection PyTypeChecker
-        cur_ans = np.full((len(arr_list),) + tuple(max_size[1:]), np.nan)
+        cur_ans = np.full((num_sim_envs,) + tuple(max_size[1:]), np.nan)
         for idx, arr in enumerate(arr_list):
             select = (idx,) + tuple(slice(0, s) for s in sizes[idx][1:])
             cur_ans[select] = arr
@@ -222,15 +223,25 @@ def combine_ana_sim_envs(ana_dict: Dict[str, AnalysisData], sim_envs: List[str])
     last_par = swp_par_list[-1]
     last_xvec = ana0[last_par]
     xvec_list = [ana[last_par] for ana in ana_list]
+    xshape_list = [x.shape for x in xvec_list]
     for xvec in xvec_list[1:]:
+        # if the last sweep parameter values are different across corners,
+        # the last sweep parameter has to be a multi dimensional array
         if not np.array_equal(xvec_list[0], xvec):
-            # last sweep parameter has to be a multi dimensional array
-            sizes = [x.shape for x in xvec_list]
             # noinspection PyTypeChecker
-            cur_ans = np.full((len(xvec_list),) + tuple(max_size[1:]), np.nan)
-            for idx, _xvec in enumerate(xvec_list):
-                select = (idx, ...) + tuple(slice(0, s) for s in sizes[idx])
-                cur_ans[select] = _xvec
+            cur_ans = np.full((num_sim_envs,) + tuple(max_size[1:]), np.nan)
+            if len(xshape_list[0]) == len(cur_ans.shape):
+                # if last sweep parameter has the same shape as the data,
+                # then join these together along the first (corner) axis
+                for idx, (_xvec, _xshape) in enumerate(zip(xvec_list, xshape_list)):
+                    select = (idx, ) + tuple(slice(0, s) for s in _xshape[1:])
+                    cur_ans[select] = _xvec
+            else:
+                # if not the same shape as the data, assume corner is missing
+                # and add it to the merged swept values
+                for idx, (_xvec, _xshape) in enumerate(zip(xvec_list, xshape_list)):
+                    select = (idx, ...) + tuple(slice(0, s) for s in _xshape)
+                    cur_ans[select] = _xvec
             last_xvec = cur_ans
             break
     merged_data[last_par] = last_xvec
