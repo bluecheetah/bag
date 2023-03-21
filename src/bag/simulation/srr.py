@@ -93,7 +93,7 @@ def srr_dataset_to_analysis_data(ds: pysrrDataSet, rtol: float, atol: float) -> 
     if is_md:
         swp_combo = {var: swp_vals[i] for i, var in enumerate(swp_vars)}
     else:
-        swp_combo = {var: swp_combo_list for var in swp_vars}
+        swp_combo = {var: np.array(swp_combo_list) for var in swp_vars}
         swp_shape = (swp_len, )
     data.update(swp_combo)
 
@@ -101,7 +101,10 @@ def srr_dataset_to_analysis_data(ds: pysrrDataSet, rtol: float, atol: float) -> 
     sig_names = ds.getSignalNameList()
     for sig_name in sig_names:
         sig_data = ds.evalSignal(sig_name).getValue()
-        if isinstance(sig_data, dict):  # Non-parametric data
+        if isinstance(sig_data, float):  # Non-parametric data, no sweep
+            sig_y = sig_data
+            data_shape = swp_shape
+        elif isinstance(sig_data, dict):  # Non-parametric data, with sweep
             sig_xname = sig_data['xname']
             sig_y = sig_data['y']
             if sig_xname in swp_vars:  # In some cases, the last sweep variable becomes the x axis of this signal
@@ -112,7 +115,7 @@ def srr_dataset_to_analysis_data(ds: pysrrDataSet, rtol: float, atol: float) -> 
                 if sig_xname not in data:
                     data[sig_xname] = sig_data['x']
                     new_swp_vars.append(sig_xname)
-        else:  # Parametric data
+        elif isinstance(sig_data, list):  # Parametric data, with sweep
             sig_xname = sig_data[0]['xname']
             len_sig_data = len(sig_data)
             yvecs = [sig_data[i]['y'] for i in range(len_sig_data)]
@@ -138,6 +141,8 @@ def srr_dataset_to_analysis_data(ds: pysrrDataSet, rtol: float, atol: float) -> 
                     if sig_xname not in data:
                         new_swp_vars.append(sig_xname)
                         data[sig_xname] = sig_data[0]['x']
+        else:
+            raise TypeError(f"Unexpected signal data type ({type(sig_data)}) for signal {sig_name}")
         try:
             sig_y_reshaped = np.reshape(sig_y, data_shape)
         except ValueError as e:  # Missing some data so reshaping fails
@@ -219,37 +224,38 @@ def combine_ana_sim_envs(ana_dict: Dict[str, AnalysisData], sim_envs: List[str])
             cur_ans[select] = arr
         merged_data[sig] = cur_ans
 
-    # get last sweep parameter
-    last_par = swp_par_list[-1]
-    last_xvec = ana0[last_par]
-    xvec_list = [ana[last_par] for ana in ana_list]
-    xshape_list = [x.shape for x in xvec_list]
-    for xvec in xvec_list[1:]:
-        # if the last sweep parameter values are different across corners,
-        # the last sweep parameter has to be a multi dimensional array
-        if not np.array_equal(xvec_list[0], xvec):
-            # noinspection PyTypeChecker
-            cur_ans = np.full((num_sim_envs,) + tuple(max_size[1:]), np.nan)
-            if len(xshape_list[0]) == len(cur_ans.shape):
-                # if last sweep parameter has the same shape as the data,
-                # then join these together along the first (corner) axis
-                for idx, (_xvec, _xshape) in enumerate(zip(xvec_list, xshape_list)):
-                    select = (idx, ) + tuple(slice(0, s) for s in _xshape[1:])
-                    cur_ans[select] = _xvec
-            else:
-                # if not the same shape as the data, assume corner is missing
-                # and add it to the merged swept values
-                for idx, (_xvec, _xshape) in enumerate(zip(xvec_list, xshape_list)):
-                    select = (idx, ...) + tuple(slice(0, s) for s in _xshape)
-                    cur_ans[select] = _xvec
-            last_xvec = cur_ans
-            break
-    merged_data[last_par] = last_xvec
+    if len(swp_par_list) > 1:
+        # get last sweep parameter
+        last_par = swp_par_list[-1]
+        last_xvec = ana0[last_par]
+        xvec_list = [ana[last_par] for ana in ana_list]
+        xshape_list = [x.shape for x in xvec_list]
+        for xvec in xvec_list[1:]:
+            # if the last sweep parameter values are different across corners,
+            # the last sweep parameter has to be a multi dimensional array
+            if not np.array_equal(xvec_list[0], xvec):
+                # noinspection PyTypeChecker
+                cur_ans = np.full((num_sim_envs,) + tuple(max_size[1:]), np.nan)
+                if len(xshape_list[0]) == len(cur_ans.shape):
+                    # if last sweep parameter has the same shape as the data,
+                    # then join these together along the first (corner) axis
+                    for idx, (_xvec, _xshape) in enumerate(zip(xvec_list, xshape_list)):
+                        select = (idx, ) + tuple(slice(0, s) for s in _xshape[1:])
+                        cur_ans[select] = _xvec
+                else:
+                    # if not the same shape as the data, assume corner is missing
+                    # and add it to the merged swept values
+                    for idx, (_xvec, _xshape) in enumerate(zip(xvec_list, xshape_list)):
+                        select = (idx, ...) + tuple(slice(0, s) for s in _xshape)
+                        cur_ans[select] = _xvec
+                last_xvec = cur_ans
+                break
+        merged_data[last_par] = last_xvec
 
-    # get all other sweep params
-    for sn in swp_par_list[:-1]:
-        if sn != 'corner':
-            merged_data[sn] = ana0[sn]
+        # get all other sweep params
+        for sn in swp_par_list[:-1]:
+            if sn != 'corner':
+                merged_data[sn] = ana0[sn]
 
     return AnalysisData(swp_par_list, merged_data, ana_list[0].is_md)
 
