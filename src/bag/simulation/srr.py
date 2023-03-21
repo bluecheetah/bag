@@ -93,8 +93,7 @@ def srr_dataset_to_analysis_data(ds: pysrrDataSet, rtol: float, atol: float) -> 
     if is_md:
         swp_combo = {var: swp_vals[i] for i, var in enumerate(swp_vars)}
     else:
-        swp_combo = {var: np.array(swp_combo_list) for var in swp_vars}
-        swp_shape = (swp_len, )
+        raise NotImplementedError("Parametric sweeps must be formatted multi-dimensionally")
     data.update(swp_combo)
 
     # Parse each signal
@@ -138,9 +137,17 @@ def srr_dataset_to_analysis_data(ds: pysrrDataSet, rtol: float, atol: float) -> 
                     assert sig_xname == swp_vars[-1]
                     data_shape = swp_shape
                 else:
+                    xvecs = np.array([sig_data[i]['x'] for i in range(len_sig_data)])
+                    same_xvec = True
+                    for xvec in xvecs[1:]:
+                        if not np.allclose(xvecs[0], xvec, rtol=rtol, atol=atol):
+                            same_xvec = False
+                            break
+                    if same_xvec:
+                        xvecs = xvecs[0]
                     if sig_xname not in data:
                         new_swp_vars.append(sig_xname)
-                        data[sig_xname] = sig_data[0]['x']
+                        data[sig_xname] = xvecs
         else:
             raise TypeError(f"Unexpected signal data type ({type(sig_data)}) for signal {sig_name}")
         try:
