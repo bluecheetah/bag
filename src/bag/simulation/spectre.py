@@ -284,14 +284,16 @@ class SpectreInterface(SimProcessManager):
         raw_path: Path = cwd_path / f'{sim_tag}.raw'
         hdf5_path: Path = cwd_path / f'{sim_tag}.hdf5'
 
-        try:
-            if raw_path.is_dir():
-                shutil.rmtree(str(raw_path))
-        except FileNotFoundError:  # Ignore errors from race conditions
-            pass
-
-        if hdf5_path.is_file():
-            hdf5_path.unlink()
+        # delete previous .raw and .hdf5
+        for fname in cwd_path.iterdir():
+            if fname.name.startswith(raw_path.name) or fname.suffix == '.hdf5':
+                try:
+                    if fname.is_dir():
+                        shutil.rmtree(str(fname))
+                    elif fname.is_file():
+                        fname.unlink()
+                except FileNotFoundError:  # Ignore errors from race conditions
+                    pass
 
         ret_code = await self.manager.async_new_subprocess(sim_cmd, str(log_path),
                                                            env=env, cwd=str(cwd_path))

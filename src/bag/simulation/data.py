@@ -556,7 +556,7 @@ class AnalysisData:
             arr_list = [arr[sig] for arr in data_list]
             sizes = [x.shape for x in arr_list]
             max_size = np.max(list(zip(*sizes)), -1)
-            cur_ans = np.full((len(arr_list),) + tuple(max_size), np.nan)
+            cur_ans = np.full((len(arr_list),) + tuple(max_size), np.nan, dtype=arr_list[0].dtype)
             for idx, arr in enumerate(arr_list):
                 # noinspection PyTypeChecker
                 select = (idx,) + tuple(slice(0, s) for s in sizes[idx])
