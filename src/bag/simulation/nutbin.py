@@ -29,14 +29,13 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import re
-from typing import Mapping, BinaryIO, Any, Dict, Sequence, Union
+from typing import Mapping, BinaryIO, Any, Dict, Sequence, Union, Tuple
 from pathlib import Path
 import numpy as np
 
 from pybag.enum import DesignOutput
 
-from .data import AnalysisData, SimData, _check_is_md
-from .srr import combine_ana_sim_envs
+from .data import AnalysisData, SimData, _check_is_md, combine_ana_sim_envs
 
 
 class NutBinParser:
@@ -171,7 +170,7 @@ class NutBinParser:
             return
         ana_type: str = info['ana_type']
         sim_env: str = info['sim_env']
-        # swp_info: Sequence[str] = info['swp_info']
+        swp_info: Sequence[str] = info['swp_info']
         swp_combo: Sequence[int] = info['swp_combo']
         inner_sweep: str = info['inner_sweep']
 
@@ -180,46 +179,20 @@ class NutBinParser:
 
         if sim_env not in ana_dict[ana_type]:
             # get outer sweep, if any
-            # swp_vars = self.parse_sweep_info(swp_info, data, f'___{ana_type}__{sim_env}__')
-            ana_dict[ana_type][sim_env] = {'data': [], 'swp_combos': [], 'inner_sweep': inner_sweep}
+            swp_vars, swp_data = parse_sweep_info(swp_info, self._cwd_path / 'sim.raw.psf',
+                                                  f'___{ana_type}__{sim_env}__', offset=44)
+            ana_dict[ana_type][sim_env] = {'data': [], 'swp_combos': [], 'inner_sweep': inner_sweep,
+                                           'swp_vars': swp_vars, 'swp_data': swp_data}
 
         ana_dict[ana_type][sim_env]['data'].append(data)
         # get outer sweep combo, if any
         if swp_combo:
-            ana_dict[ana_type][sim_env]['swp_combos'].append(swp_combo)
-
-    def parse_sweep_info(self, swp_info: Sequence[str], data: Dict[str, np.ndarray], suf: str) -> Sequence[str]:
-        # read from innermost sweep outwards
-        new_swp_info = list(swp_info)
-        swp_vars = []
-        while len(new_swp_info) > 0:
-            name = '-000_'.join(new_swp_info) + suf + '.sweep'
-            swp_vars.insert(0, self.parse_sweep_file(self._cwd_path / 'sim.raw.psf' / name, data))
-            new_swp_info.pop()
-        return swp_vars
-
-    @staticmethod
-    def parse_sweep_file(file_path: Path, data: Dict[str, np.ndarray]) -> str:
-        # TODO: how to parse this?
-        print('-----------------')
-        print(file_path)
-        with open(file_path, 'rb') as f:
-            lidx = 0
-            while True:
-                line = f.readline()
-                if len(line) == 0:  # EOF
-                    break
-                print(f'---- line {lidx} ---')
-                try:
-                    print(line.decode('ascii'))
-                    print('ASCII')
-                except UnicodeDecodeError:
-                    print(line)
-                    print('ASCII ERROR')
-                lidx += 1
-        print('-----------------')
-        breakpoint()
-        return ''
+            swp_combo_val = []
+            swp_vars = ana_dict[ana_type][sim_env]['swp_vars']
+            swp_data = ana_dict[ana_type][sim_env]['swp_data']
+            for _vridx, _vlidx in enumerate(swp_combo):
+                swp_combo_val.append(swp_data[swp_vars[_vridx]][_vlidx])
+            ana_dict[ana_type][sim_env]['swp_combos'].append(swp_combo_val)
 
     def convert_to_sim_data(self, nb_data, rtol: float, atol: float) -> SimData:
         ana_dict = {}
@@ -241,7 +214,7 @@ class NutBinParser:
         swp_combos = nb_dict['swp_combos']
         if swp_combos:  # create sweep combinations
             num_swp = len(swp_combos[0])
-            swp_vars = [f'swp{idx:02d}' for idx in range(num_swp)]
+            swp_vars = nb_dict['swp_vars']
 
             # if PAC, configure harmonic sweep
             if ana_type == 'pac':
@@ -347,3 +320,52 @@ class NutBinParser:
             swp_vars.append(inner_sweep)
 
         return AnalysisData(['corner'] + swp_vars, data, is_md)
+
+
+def parse_sweep_info(swp_info: Sequence[str], raw_path: Path, suf: str, offset: int
+                     ) -> Tuple[Sequence[str], Mapping[str, np.ndarray]]:
+    # read from innermost sweep outwards
+    new_swp_info = list(swp_info)
+    swp_vars = []
+    swp_data = {}
+    while len(new_swp_info) > 0:
+        # assume nested sweeps are always consistent across outer sweeps, and read 0th sweep file only
+        name = '-000_'.join(new_swp_info) + suf + '.sweep'
+        _swp_var, _swp_vals = parse_sweep_file(raw_path / name, offset)
+        swp_vars.insert(0, _swp_var)
+        swp_data[_swp_var] = _swp_vals
+        new_swp_info.pop()
+    return swp_vars, swp_data
+
+
+def parse_sweep_file(file_path: Path, offset: int) -> Tuple[str, np.ndarray]:
+    with open(file_path, 'rb') as f:
+        pattern = re.compile(r'([a-zA-Z0-9_]+)')
+        while True:
+            name_bin = f.readline()
+            name_ascii = name_bin.decode('ascii', errors='ignore')
+            name_find = re.findall(pattern, name_ascii)
+            try:
+                sd_idx = name_find.index('sweep_direction')
+                # this line has "sweep_direction" and "grid"
+                break
+            except ValueError:
+                continue
+
+        # the ASCII string before "sweep_direction" is the sweep variable name
+        swp_name = name_find[sd_idx - 1]
+
+        # find the location of the end of "grid" from the end
+        val_idx = len(name_bin) - name_bin.find(b'grid') - 4
+        val_idx -= offset  # extra offset to reach beginning of binary data
+        f.seek(-val_idx, 1)
+        bin_data = np.fromfile(f, dtype=np.dtype(float).newbyteorder(">"))
+
+        swp_vals = []
+        for val0, val1 in zip(bin_data[::2], bin_data[1::2]):
+            # when val0 is the following float, val1 is a sweep parameter value
+            if np.isclose(val0, 3.39519327e-313, atol=1e-321):
+                swp_vals.append(val1)
+            else:
+                break
+    return swp_name, np.array(swp_vals)

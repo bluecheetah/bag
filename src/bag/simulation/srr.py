@@ -28,7 +28,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import List, Dict, Union
+from typing import Union
 
 from pathlib import Path
 
@@ -39,7 +39,7 @@ import numpy as np
 from pybag.enum import DesignOutput
 from pybag.core import get_bag_logger
 
-from .data import AnalysisData, SimData, _check_is_md
+from .data import AnalysisData, SimData, _check_is_md, combine_ana_sim_envs
 
 from srr_python.pysrr import pysrrDataBase, pysrrDataSet
 
@@ -186,85 +186,6 @@ def get_sim_env(ds: pysrrDataSet) -> str:
     if not matched:
         raise ValueError(f"Unmatched dataset name {ds_name} of analysis type {ana_type}")
     return matched.group(1)
-
-
-def combine_ana_sim_envs(ana_dict: Dict[str, AnalysisData], sim_envs: List[str]) -> AnalysisData:
-    """Combine multiple single-corner analysis data to a single multi-corner analysis data.
-
-    Parameters
-    ----------
-    ana_dict : Dict[str, AnalysisData]
-        dictionary mapping corner to analysis data.
-    sim_envs: List[str]
-        list of corners.
-
-    Returns
-    -------
-    ana_data : AnalysisData
-        the combined analysis data.
-    """
-
-    cur_ana_sim_envs = list(ana_dict.keys())
-    assert sorted(cur_ana_sim_envs) == sorted(sim_envs), f"Expected corners {sim_envs}, got {cur_ana_sim_envs}"
-
-    num_sim_envs = len(sim_envs)
-    if num_sim_envs == 1:  # Single corner, nothing to combine
-        return ana_dict[sim_envs[0]]
-
-    ana_list = [ana_dict[sim_env] for sim_env in sim_envs]  # Reorder analyses by corner
-    merged_data = {}
-
-    ana0 = ana_list[0]
-    swp_par_list = ana0.sweep_params
-
-    # get all signals
-    max_size = None
-    for sig in ana0.signals:
-        arr_list = [arr[sig] for arr in ana_list]
-        sizes = [x.shape for x in arr_list]
-        max_size = np.max(list(zip(*sizes)), -1)
-        assert max_size[0] == 1
-        # noinspection PyTypeChecker
-        cur_ans = np.full((num_sim_envs,) + tuple(max_size[1:]), np.nan)
-        for idx, arr in enumerate(arr_list):
-            select = (idx,) + tuple(slice(0, s) for s in sizes[idx][1:])
-            cur_ans[select] = arr
-        merged_data[sig] = cur_ans
-
-    if len(swp_par_list) > 1:
-        # get last sweep parameter
-        last_par = swp_par_list[-1]
-        last_xvec = ana0[last_par]
-        xvec_list = [ana[last_par] for ana in ana_list]
-        xshape_list = [x.shape for x in xvec_list]
-        for xvec in xvec_list[1:]:
-            # if the last sweep parameter values are different across corners,
-            # the last sweep parameter has to be a multi dimensional array
-            if not np.array_equal(xvec_list[0], xvec):
-                # noinspection PyTypeChecker
-                cur_ans = np.full((num_sim_envs,) + tuple(max_size[1:]), np.nan)
-                if len(xshape_list[0]) == len(cur_ans.shape):
-                    # if last sweep parameter has the same shape as the data,
-                    # then join these together along the first (corner) axis
-                    for idx, (_xvec, _xshape) in enumerate(zip(xvec_list, xshape_list)):
-                        select = (idx, ) + tuple(slice(0, s) for s in _xshape[1:])
-                        cur_ans[select] = _xvec
-                else:
-                    # if not the same shape as the data, assume corner is missing
-                    # and add it to the merged swept values
-                    for idx, (_xvec, _xshape) in enumerate(zip(xvec_list, xshape_list)):
-                        select = (idx, ...) + tuple(slice(0, s) for s in _xshape)
-                        cur_ans[select] = _xvec
-                last_xvec = cur_ans
-                break
-        merged_data[last_par] = last_xvec
-
-        # get all other sweep params
-        for sn in swp_par_list[:-1]:
-            if sn != 'corner':
-                merged_data[sn] = ana0[sn]
-
-    return AnalysisData(swp_par_list, merged_data, ana_list[0].is_md)
 
 
 def srr_to_sim_data(srr_path: Union[str, Path], rtol: float, atol: float) -> SimData:

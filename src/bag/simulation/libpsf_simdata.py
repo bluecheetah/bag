@@ -29,15 +29,15 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import re
-from typing import Mapping, Any, Dict, Tuple, Union, Optional
+from typing import Mapping, Any, Dict, Tuple, Union, Optional, Sequence
 from pathlib import Path
 from libpsf import PSFDataSet
 import numpy as np
 
 from pybag.enum import DesignOutput
 
-from .data import AnalysisData, SimData, _check_is_md
-from .srr import combine_ana_sim_envs
+from .data import AnalysisData, SimData, _check_is_md, combine_ana_sim_envs
+from .nutbin import parse_sweep_info
 
 
 class LibPSFParser:
@@ -128,6 +128,7 @@ class LibPSFParser:
             harmonic = None
 
         # get outer sweep information from ana_name, if any
+        m_swp = re.findall('swp[0-9]{2}', ana_name)
         m_swp1 = re.findall('swp[0-9]{2}-[0-9]{3}', ana_name)
         key_list = []
         for idx, val in enumerate(m_swp1):
@@ -137,16 +138,17 @@ class LibPSFParser:
             ana_name=ana_name,
             sim_env=m.group(2),
             ana_type=ana_type,
+            swp_info=m_swp,
             swp_key='_'.join(key_list),
             harmonic=harmonic,
         )
 
-    @staticmethod
-    def populate_dict(ana_dict: Dict[str, Any], info: Mapping[str, Any],
+    def populate_dict(self, ana_dict: Dict[str, Any], info: Mapping[str, Any],
                       data: Dict[str, Union[np.ndarray, float]]) -> None:
         ana_type: str = info['ana_type']
         sim_env: str = info['sim_env']
         swp_key: str = info['swp_key']
+        swp_info: Sequence[str] = info['swp_info']
         harmonic: Optional[int] = info['harmonic']
         inner_sweep: str = info['inner_sweep']
 
@@ -154,12 +156,15 @@ class LibPSFParser:
             ana_dict[ana_type] = {}
 
         if sim_env not in ana_dict[ana_type]:
-            # TODO: how to get outer sweep parameter names and values?
-
+            # get outer sweep, if any
+            swp_vars, swp_data = parse_sweep_info(swp_info, self._cwd_path / 'sim.raw', f'___{ana_type}__{sim_env}__',
+                                                  offset=16)
             ana_dict[ana_type][sim_env] = {
                 'inner_sweep': inner_sweep,
                 'outer_sweep': swp_key is not '',
                 'harmonics': harmonic is not None,
+                'swp_vars': swp_vars,
+                'swp_data': swp_data,
             }
             if swp_key or (harmonic is not None):
                 ana_dict[ana_type][sim_env]['data'] = {}
@@ -196,17 +201,18 @@ class LibPSFParser:
         inner_sweep: str = lp_dict['inner_sweep']
         outer_sweep: bool = lp_dict['outer_sweep']
         harmonics: bool = lp_dict['harmonics']
+        swp_vars = lp_dict['swp_vars']
+        swp_data = lp_dict['swp_data']
         lp_data = lp_dict['data']
         if outer_sweep:
             swp_combos = []
             swp_keys = sorted(lp_data.keys())
             for key in swp_keys:
                 swp_combo = []
-                for _id in key.split('_'):
-                    swp_combo.append(int(_id))
+                for _vridx, _vlidx in enumerate(key.split('_')):
+                    swp_combo.append(swp_data[swp_vars[_vridx]][int(_vlidx)])
                 swp_combos.append(swp_combo)
             num_swp = len(swp_combos[0])
-            swp_vars = [f'swp{idx:02d}' for idx in range(num_swp)]
 
             if harmonics:
                 swp_vars.append('harmonic')
@@ -230,7 +236,6 @@ class LibPSFParser:
                 swp_len = len(harm_swp)
                 swp_combo_list = [np.array(harm_swp)]
             else:
-                swp_vars = []
                 harm_swp = []
                 swp_len = 0
                 swp_combo_list = []
