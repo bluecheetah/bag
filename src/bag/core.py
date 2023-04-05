@@ -1088,24 +1088,30 @@ class BagProject:
 
     def run_em_cell(self, specs: Mapping[str, Any], force_sim: bool = False,
                     log_level: LogLevel = LogLevel.DEBUG) -> None:
-        impl_lib: str = specs['impl_lib']
+        gds_file: str = specs.get('gds_file', '')
         impl_cell: str = specs['impl_cell']
         root_dir: Union[str, Path] = specs['root_dir']
+        root_path = self.get_root_path(root_dir, use_sim_path=True)
+        if gds_file:
+            export_lay = False
+            gds_path = Path(gds_file)
+            impl_lib = ''
+        else:
+            export_lay = True
+            gds_path = root_path / f'{impl_cell}.gds'
+            impl_lib: str = specs['impl_lib']
         params: Mapping[str, Any] = specs['params']
         process_output: bool = specs.get('process_output', True)
-
-        root_path = self.get_root_path(root_dir, use_sim_path=True)
-
-        gds_file = root_path / f'{impl_cell}.gds'
 
         # TODO: caching
 
         # run EM simulation if it is defined in bag_config.yaml
         if self._em_sim:
-            self.export_layout(impl_lib, impl_cell, str(gds_file))
+            if export_lay:
+                self.export_layout(impl_lib, impl_cell, str(gds_path))
 
             if force_sim:
-                self._em_sim.run_simulation(impl_cell, gds_file, params, root_path)
+                self._em_sim.run_simulation(impl_cell, gds_path, params, root_path)
             else:
                 print('Skipping EM simulation and using old results. Use "--force_sim" to force EM simulation.')
             if process_output:

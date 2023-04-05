@@ -102,10 +102,12 @@ class EMXInterface(EmSimProcessManager):
                 portlist_n.remove(gnd)
         port_string = []
         for idx, port in enumerate(portlist_n):
-            port_string.extend(['-p', f'P{idx:03d}=\'{port}\'', '-i', f'P{idx:03d}'])
+            # port_string.extend(['-p', f'P{idx:03d}=\'{port}\'', '-i', f'P{idx:03d}'])
+            port_string.extend(['-p', f'P{idx:03d}={port}', '-i', f'P{idx:03d}'])
         n_ports = len(portlist_n)
         for idx, port in enumerate(gndlist_n):
-            port_string.extend(['-p', f'P{(idx + n_ports):03d}=\'{port}\''])
+            # port_string.extend(['-p', f'P{(idx + n_ports):03d}=\'{port}\''])
+            port_string.extend(['-p', f'P{(idx + n_ports):03d}={port}'])
 
         # get s/y parameters and model
         model_path.mkdir(parents=True, exist_ok=True)
