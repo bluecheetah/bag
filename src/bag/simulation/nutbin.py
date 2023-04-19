@@ -66,7 +66,7 @@ class NutBinParser:
                 if len(plotname) == 0:  # EOF
                     break
                 data = self.parse_analysis(f)
-                self.populate_dict(ana_dict, plotname, data)
+                self.populate_dict(ana_dict, plotname, raw_path, data)
         return ana_dict
 
     @staticmethod
@@ -161,7 +161,8 @@ class NutBinParser:
             inner_sweep=inner_sweep,
         )
 
-    def populate_dict(self, ana_dict: Dict[str, Any], plotname: str, data: Dict[str, Union[np.ndarray, float]]) -> None:
+    def populate_dict(self, ana_dict: Dict[str, Any], plotname: str, raw_path: Path,
+                      data: Dict[str, Union[np.ndarray, float]]) -> None:
         # get analysis name and sim_env
         info = self.get_info_from_plotname(plotname)
         ana_name: str = info['ana_name']
@@ -179,7 +180,7 @@ class NutBinParser:
 
         if sim_env not in ana_dict[ana_type]:
             # get outer sweep, if any
-            swp_vars, swp_data = parse_sweep_info(swp_info, self._cwd_path / 'sim.raw.psf',
+            swp_vars, swp_data = parse_sweep_info(swp_info, self._cwd_path / f'{raw_path.name}.psf',
                                                   f'___{ana_type}__{sim_env}__', offset=44)
             ana_dict[ana_type][sim_env] = {'data': [], 'swp_combos': [], 'inner_sweep': inner_sweep,
                                            'swp_vars': swp_vars, 'swp_data': swp_data}

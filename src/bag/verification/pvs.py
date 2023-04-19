@@ -51,6 +51,7 @@ from typing import TYPE_CHECKING, Optional, List, Dict, Any, Sequence, Tuple, Un
 from pathlib import Path
 
 from ..io import read_file, write_file
+from ..io.file import is_valid_file
 
 from .virtuoso import VirtuosoChecker
 
@@ -148,10 +149,10 @@ class PVS(VirtuosoChecker):
         def _rcx_passed_check(retcode: int, log_file: str) -> Tuple[str, str]:
             out_file = Path(log_file).parent.resolve()
             out_file = out_file.joinpath(f'{cell_name}.spf')
-            if not out_file.is_file():
-                return '', ''
+            if not is_valid_file(out_file, None, 60, 1):
+                return '', log_file
 
-            return str(out_file), str(log_file)
+            return str(out_file), log_file
 
         mode = 'rcx'
         tmp = self.setup_job(mode, lib_name, cell_name, layout, netlist, lay_view, sch_view, params, run_dir)
@@ -189,8 +190,8 @@ def _lvs_passed_check(retcode: int, log_file: str) -> Tuple[bool, str]:
         the log file name.
     """
     fpath = Path(log_file)
-    if not fpath.is_file():
-        return False, ''
+    if not is_valid_file(fpath, 'PVS Comparison Finished.', 60, 1):
+        return False, log_file if fpath.is_file() else ''
 
     cmd_output = read_file(fpath)
     test_str = '# Run Result             : MATCH'

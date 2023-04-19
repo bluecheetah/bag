@@ -59,7 +59,7 @@ class LibPSFParser:
                 info = self.get_info_from_fname(fname.name)
                 data, inner_sweep = self.parse_raw_file(fname)
                 info['inner_sweep'] = inner_sweep
-                self.populate_dict(ana_dict, info, data)
+                self.populate_dict(ana_dict, info, raw_path, data)
         return ana_dict
 
     @staticmethod
@@ -143,7 +143,7 @@ class LibPSFParser:
             harmonic=harmonic,
         )
 
-    def populate_dict(self, ana_dict: Dict[str, Any], info: Mapping[str, Any],
+    def populate_dict(self, ana_dict: Dict[str, Any], info: Mapping[str, Any], raw_path: Path,
                       data: Dict[str, Union[np.ndarray, float]]) -> None:
         ana_type: str = info['ana_type']
         sim_env: str = info['sim_env']
@@ -157,7 +157,7 @@ class LibPSFParser:
 
         if sim_env not in ana_dict[ana_type]:
             # get outer sweep, if any
-            swp_vars, swp_data = parse_sweep_info(swp_info, self._cwd_path / 'sim.raw', f'___{ana_type}__{sim_env}__',
+            swp_vars, swp_data = parse_sweep_info(swp_info, raw_path, f'___{ana_type}__{sim_env}__',
                                                   offset=16)
             ana_dict[ana_type][sim_env] = {
                 'inner_sweep': inner_sweep,
