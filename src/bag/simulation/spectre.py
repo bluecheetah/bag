@@ -319,6 +319,7 @@ class SpectreInterface(SimProcessManager):
         if 'spectre completes with 0 errors' not in log_contents:
             raise ValueError(f'Spectre simulation ended with error.  See log file: {log_path}')
 
+        num_proc = 1
         if self._out_fmt.startswith('psf'):
             # check if Monte Carlo sim
             for fname in raw_path.iterdir():
@@ -354,7 +355,7 @@ class SpectreInterface(SimProcessManager):
             log_path = cwd_path / 'srr_to_hdf5.log'
             await self._srr_to_hdf5(compress, rtol, atol, raw_path, hdf5_path, log_path, cwd_path)
         elif self._out_fmt == 'psfbin':
-            lpp = LibPSFParser(raw_path, rtol, atol)
+            lpp = LibPSFParser(raw_path, rtol, atol, num_proc)
             save_sim_data_hdf5(lpp.sim_data, hdf5_path, compress)
             # post-process HDF5 to convert to MD array
             _process_hdf5(hdf5_path, rtol, atol)
