@@ -62,6 +62,7 @@ class LibPSFParser:
         return ana_dict
 
     def _parse_raw_folder_helper(self, raw_path: Path, ana_dict: Dict[str, Any]) -> None:
+        idx = 0     # keep track of which directories have already been checked for outer sweep info
         for fname in raw_path.iterdir():
             # some files have multiple suffixes, so split name at first '.' to get entire suffix
             suf = fname.name.split('.', 1)[-1]
@@ -69,7 +70,8 @@ class LibPSFParser:
                 info = self.get_info_from_fname(fname.name)
                 data, inner_sweep = self.parse_raw_file(fname)
                 info['inner_sweep'] = inner_sweep
-                self.populate_dict(ana_dict, info, raw_path, data)
+                self.populate_dict(ana_dict, info, raw_path, data, idx)
+                idx += 1
 
     @staticmethod
     def parse_raw_file(fname: Path) -> Tuple[Dict[str, Union[np.ndarray, float]], str]:
@@ -153,7 +155,7 @@ class LibPSFParser:
         )
 
     def populate_dict(self, ana_dict: Dict[str, Any], info: Mapping[str, Any], raw_path: Path,
-                      data: Dict[str, Union[np.ndarray, float]]) -> None:
+                      data: Dict[str, Union[np.ndarray, float]], idx: int) -> None:
         ana_type: str = info['ana_type']
         sim_env: str = info['sim_env']
         swp_key: str = info['swp_key']
@@ -177,8 +179,9 @@ class LibPSFParser:
             }
             if swp_key or (harmonic is not None):
                 ana_dict[ana_type][sim_env]['data'] = {}
-        elif self._num_proc > 1:
-            # multi-processing mode, need to parse more sweep files
+
+        if self._num_proc > 1 and int(raw_path.name) > 1 and idx == 0:
+            # multi-processing mode, need to parse sweep file once in every distributed directory
             swp_vars, swp_data = parse_sweep_info(swp_info, raw_path, f'___{ana_type}__{sim_env}__',
                                                   offset=16)
             for _key, _val in swp_data.items():

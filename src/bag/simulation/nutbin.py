@@ -332,9 +332,14 @@ def parse_sweep_info(swp_info: Sequence[str], raw_path: Path, suf: str, offset: 
     while len(new_swp_info) > 0:
         # assume nested sweeps are always consistent across outer sweeps, and read 0th sweep file only
         name = '-000_'.join(new_swp_info) + suf + '.sweep'
-        _swp_var, _swp_vals = parse_sweep_file(raw_path / name, offset)
-        swp_vars.insert(0, _swp_var)
-        swp_data[_swp_var] = _swp_vals
+        file_path = raw_path / name
+        if file_path.is_file():
+            _swp_var, _swp_vals = parse_sweep_file(raw_path / name, offset)
+            swp_vars.insert(0, _swp_var)
+            swp_data[_swp_var] = _swp_vals
+        else:
+            # this is in multiprocessing mode, so sweep is already read in 0th fork
+            swp_vars.insert(0, '')
         new_swp_info.pop()
     return swp_vars, swp_data
 
