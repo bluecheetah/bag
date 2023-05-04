@@ -138,12 +138,13 @@ class NutBinParser:
 
         # For PSS, edit ana_type based on inner sweep
         if ana_type == 'pss':
-            if inner_sweep == 'freq':
+            if inner_sweep == 'fund':
                 ana_type = 'pss_fd'
+                inner_sweep = 'freq'
             elif inner_sweep == 'time':
                 ana_type = 'pss_td'
             else:
-                raise NotImplementedError
+                raise NotImplementedError(f'Unrecognized inner_sweep = {inner_sweep}')
 
         # get outer sweep information from ana_name, if any
         m_swp = re.findall('swp[0-9]{2}', ana_name)
@@ -180,12 +181,38 @@ class NutBinParser:
 
         if sim_env not in ana_dict[ana_type]:
             # get outer sweep, if any
-            swp_vars, swp_data = parse_sweep_info(swp_info, self._cwd_path / f'{raw_path.name}.psf',
-                                                  f'___{ana_type}__{sim_env}__', offset=44)
+            swp_vars, swp_data = parse_sweep_info(swp_info, self._cwd_path / f'{raw_path.name}.psf', ana_type, sim_env,
+                                                  offset=44)
             ana_dict[ana_type][sim_env] = {'data': [], 'swp_combos': [], 'inner_sweep': inner_sweep,
-                                           'swp_vars': swp_vars, 'swp_data': swp_data}
+                                           'swp_vars': swp_vars, 'swp_data': swp_data, 'ana_name': []}
+
+        if ana_name in ana_dict[ana_type][sim_env]['ana_name']:
+            if ana_type == 'pss_td':
+                # In PSS simulations with saveinit=yes, the only way to detect the difference between the initial
+                # transient sim and the subsequent time-domain PSS is the order of the results in the raw file. Hence,
+                # if we get the same ana_name, the previous result was pss_tran, and we are currently seeing pss_td.
+                prev_ana_type = 'pss_tran'
+
+                if prev_ana_type not in ana_dict:
+                    ana_dict[prev_ana_type] = {}
+
+                if sim_env not in ana_dict[prev_ana_type]:
+                    # get outer sweep, if any
+                    prev_swp_vars, prev_swp_data = parse_sweep_info(swp_info, self._cwd_path / f'{raw_path.name}.psf',
+                                                                    prev_ana_type, sim_env, offset=44)
+                    ana_dict[prev_ana_type][sim_env] = {'data': [], 'swp_combos': [], 'inner_sweep': inner_sweep,
+                                                        'swp_vars': prev_swp_vars, 'swp_data': prev_swp_data,
+                                                        'ana_name': []}
+
+                ana_dict[prev_ana_type][sim_env]['data'].append(ana_dict[ana_type][sim_env]['data'].pop())
+                ana_dict[prev_ana_type][sim_env]['ana_name'].append(ana_dict[ana_type][sim_env]['ana_name'].pop())
+                if swp_combo:
+                    ana_dict[prev_ana_type][sim_env]['swp_combos'].append(ana_dict[ana_type][sim_env]['swp_combos'].pop())
+            else:
+                raise NotImplementedError('This should not be possible; see developer.')
 
         ana_dict[ana_type][sim_env]['data'].append(data)
+        ana_dict[ana_type][sim_env]['ana_name'].append(ana_name)
         # get outer sweep combo, if any
         if swp_combo:
             swp_combo_val = []
@@ -323,12 +350,13 @@ class NutBinParser:
         return AnalysisData(['corner'] + swp_vars, data, is_md)
 
 
-def parse_sweep_info(swp_info: Sequence[str], raw_path: Path, suf: str, offset: int
+def parse_sweep_info(swp_info: Sequence[str], raw_path: Path, ana_type: str, sim_env: str, offset: int
                      ) -> Tuple[Sequence[str], Mapping[str, np.ndarray]]:
     # read from innermost sweep outwards
     new_swp_info = list(swp_info)
     swp_vars = []
     swp_data = {}
+    suf = get_sweep_file_suf(ana_type, sim_env)
     while len(new_swp_info) > 0:
         # assume nested sweeps are always consistent across outer sweeps, and read 0th sweep file only
         name = '-000_'.join(new_swp_info) + suf + '.sweep'
@@ -375,3 +403,10 @@ def parse_sweep_file(file_path: Path, offset: int) -> Tuple[str, np.ndarray]:
             else:
                 break
     return swp_name, np.array(swp_vals)
+
+
+def get_sweep_file_suf(ana_type: str, sim_env: str) -> str:
+    if ana_type.startswith('pss'):
+        pss_type = ana_type.split('_')[-1]
+        return f'___pss__{sim_env}___{pss_type}'
+    return f'___{ana_type}__{sim_env}__'
