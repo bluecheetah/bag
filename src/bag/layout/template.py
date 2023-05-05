@@ -2666,13 +2666,102 @@ class TemplateBase(DesignMaster):
                       vss_warrs: Optional[Union[WireArray, List[WireArray]]] = None, bound_box: Optional[BBox] = None,
                       x_margin: int = 0, y_margin: int = 0, sup_type: str = 'both', flip: bool = False,
                       uniform_grid: bool = False) -> Tuple[List[WireArray], List[WireArray]]:
-        """Draw power fill on the given layer."""
+        """Draw power fill on the given layer. Wrapper around do_multi_power_fill method
+        that only returns the VDD and VSS wires.
+
+        Parameters
+        ----------
+        layer_id : int
+            the layer ID on which to draw power fill.
+        tr_manager : TrackManager
+            the TrackManager object.
+        sup_list : List[Union[WireArray, List[WireArray]]]
+            a list of supply wires to draw power fill for.
+        bound_box : Optional[BBox]
+            bound box over which to draw the power fill
+        x_margin : int
+            keepout margin on the x-axis. Fill is centered within margin.
+        y_margin : int
+            keepout margin on the y-axis. Fill is centered within margin.
+        uniform_grid : bool
+            draw power fill on a common grid instead of dense packing.
+        flip : bool
+            true to reverse order of power fill. Default (False) is {VDD, VSS}.
+
+        Returns
+        -------
+        Tuple[List[WireArray], List[WireArray]]
+            Tuple of VDD and VSS wires. If only one supply was specified, the other will be an empty list.
+        """
+        # Value checks
+        if sup_type.lower() not in ['vdd', 'vss', 'both']:
+            raise ValueError('sup_type has to be "VDD" or "VSS" or "both"(default)')
+        if not vdd_warrs and not vss_warrs:
+            raise ValueError('At least one of vdd_warrs or vss_warrs must be given.')
+
+        # Build supply lists based on specficiation
+        if sup_type.lower() == 'both' and vdd_warrs and vss_warrs:
+            top_lists = [vdd_warrs, vss_warrs]
+        elif sup_type.lower() == 'vss' and vss_warrs:
+            top_lists = [vss_warrs]
+        elif sup_type.lower() == 'vdd' and vdd_warrs:
+            top_lists = [vdd_warrs]
+        else:
+            raise RuntimeError('Provided supply type and supply wires do not match.')
+
+        # Run the actual power fill using the multi_power_fill function
+        ret_warrs = self.do_multi_power_fill(layer_id, tr_manager, top_lists, bound_box,
+                                             x_margin, y_margin, flip, uniform_grid)
+
+        # Reorganize return values
+        if sup_type.lower() == 'both':
+            top_vdd, top_vss = (ret_warrs[0], ret_warrs[1]) if not flip else (ret_warrs[1], ret_warrs[0])
+        elif sup_type.lower() == 'vss':
+            top_vdd = []
+            top_vss = ret_warrs[0]
+        elif sup_type.lower() == 'vdd':
+            top_vss = []
+            top_vdd = ret_warrs[0]
+
+        return top_vdd, top_vss
+
+    def do_multi_power_fill(self, layer_id: int, tr_manager: TrackManager, sup_list: List[Union[WireArray, List[WireArray]]],
+                            bound_box: Optional[BBox] = None, x_margin: int = 0, y_margin: int = 0, flip: bool = False,
+                            uniform_grid: bool = False) -> List[List[WireArray]]:
+        """Draw power fill on the given layer. Accepts as many different supply nets as provided.
+
+        Parameters
+        ----------
+        layer_id : int
+            the layer ID on which to draw power fill.
+        tr_manager : TrackManager
+            the TrackManager object.
+        sup_list : List[Union[WireArray, List[WireArray]]]
+            a list of supply wires to draw power fill for.
+        bound_box : Optional[BBox]
+            bound box over which to draw the power fill
+        x_margin : int
+            keepout margin on the x-axis. Fill is centered within margin.
+        y_margin : int
+            keepout margin on the y-axis. Fill is centered within margin.
+        uniform_grid : bool
+            draw power fill on a common grid instead of dense packing.
+        flip : bool
+            true to reverse order of power fill. Default is False.
+
+        Returns
+        -------
+        List[List[WireArray]]
+            List of the wire arrays for each supply in sup_list, given in the
+            same order as sup_list.
+        """
         if bound_box is None:
             if self.bound_box is None:
                 raise ValueError("bound_box is not set")
             bound_box = self.bound_box
         bound_box = bound_box.expand(dx=-x_margin, dy=-y_margin)
         is_horizontal = (self.grid.get_direction(layer_id) == 0)
+        num_sups = len(sup_list)
         if is_horizontal:
             cl, cu = bound_box.yl, bound_box.yh
             lower, upper = bound_box.xl, bound_box.xh
@@ -2687,29 +2776,20 @@ class TemplateBase(DesignMaster):
         trs = self.get_available_tracks(layer_id, tid_lo=tr_bot, tid_hi=tr_top, lower=lower, upper=upper,
                                         width=fill_width, sep=fill_space, sep_margin=sep_margin,
                                         uniform_grid=uniform_grid)
-        top_vdd: List[WireArray] = []
-        top_vss: List[WireArray] = []
+        all_warrs = [[] for _ in range(num_sups)]
         htr_sep = HalfInt.convert(fill_space).dbl_value
+        if len(trs) < num_sups:
+            raise ValueError('Not enough available tracks to fill for all provided supplies')
         for ncur, tr_idx in enumerate(trs):
-            # tr_idx = (htr0 + ncur * htr_pitch - 1) / 2
             warr = self.add_wires(layer_id, tr_idx, lower, upper, width=fill_width)
-            if sup_type.lower() == 'vss':
-                top_vss.append(warr)
-            elif sup_type.lower() == 'vdd':
-                top_vdd.append(warr)
-            elif sup_type.lower() == 'both':
-                _ncur = HalfInt.convert(tr_idx).dbl_value // htr_sep if uniform_grid else ncur
-                if (_ncur % 2 == 0) != flip:
-                    top_vss.append(warr)
-                else:
-                    top_vdd.append(warr)
+            _ncur = HalfInt.convert(tr_idx).dbl_value // htr_sep if uniform_grid else ncur
+            if not flip:
+                all_warrs[_ncur % num_sups].append(warr)
             else:
-                raise ValueError('sup_type has to be "VDD" or "VSS" or "both"(default)')
-        if vdd_warrs:
-            self.draw_vias_on_intersections(vdd_warrs, top_vdd)
-        if vss_warrs:
-            self.draw_vias_on_intersections(vss_warrs, top_vss)
-        return top_vdd, top_vss
+                all_warrs[(num_sups - 1) - (_ncur % num_sups)].append(warr)
+        for top_warr, bot_warr in zip(sup_list, all_warrs):
+            self.draw_vias_on_intersections(top_warr, bot_warr)
+        return all_warrs
 
     def get_lef_options(self, options: Dict[str, Any], config: Mapping[str, Any]) -> None:
         """Populate the LEF options dictionary.
