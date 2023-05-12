@@ -597,6 +597,17 @@ dio_default = {
     },
 }
 
+clamp_default = {
+    'lib_name': 'BAG_prim',
+    'cell_name': '',
+    'in_terms': [],
+    'out_terms': [],
+    'io_terms': ['VDD', 'VSS'],
+    'nets': [],
+    'is_prim': True,
+    'props': {},
+}
+
 res_metal_default = {
     'lib_name': 'BAG_prim',
     'cell_name': '',
@@ -665,6 +676,12 @@ dio_cdl_fmt_static = """.SUBCKT {{ cell_name }}{% if ports|length == 3 %} GUARD_
 .ENDS
 """
 
+clamp_cdl_fmt = """.SUBCKT {{ cell_name }} VDD VSS
+*.PININFO VDD:B VSS:B
+{{ prefix }}X0 VDD VSS {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
+.ENDS
+"""
+
 res_metal_cdl_fmt = """.SUBCKT {{ cell_name }} MINUS PLUS
 *.PININFO MINUS:B PLUS:B
 {{ prefix }}R0 PLUS MINUS {{ model_name }} {% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
@@ -703,6 +720,11 @@ ends {{ cell_name }}
 
 dio_spectre_fmt_static = """subckt {{ cell_name }}{% if ports|length == 3 %} GUARD_RING{% endif %} MINUS PLUS
 {{ prefix }}D0 {{ ports[0] }} {{ ports[1] }}{% if ports|length == 3 %} {{ ports[2] }}{% endif %} {{ model_name }}
+ends {{ cell_name }}
+"""
+
+clamp_spectre_fmt = """subckt {{ cell_name }} VDD VSS
+{{ prefix }}X0 VDD VSS {{ model_name }}{% for key, val in param_list %} {{ key }}={{ val }}{% endfor %}
 ends {{ cell_name }}
 """
 
@@ -754,6 +776,7 @@ supported_formats = {
         'mos3': 'mos3_cdl',
         'diode': 'diode_cdl',
         'diode_static': 'diode_cdl_static',
+        'clamp': 'clamp_cdl',
         'res_metal': 'res_metal_cdl',
         'res': 'res_cdl',
         'mim': 'mim_cdl',
@@ -764,6 +787,7 @@ supported_formats = {
         'mos3': 'mos3_scs',
         'diode': 'diode_scs',
         'diode_static': 'diode_scs_static',
+        'clamp': 'clamp_scs',
         'res_metal': 'res_metal_scs',
         'res': 'res_scs',
         'mim': 'mim_scs',
@@ -774,6 +798,7 @@ supported_formats = {
         'mos3': '',
         'diode': '',
         'diode_static': '',
+        'clamp': '',
         'res_metal': '',
         'res': '',
         'mim': '',
@@ -784,6 +809,7 @@ supported_formats = {
         'mos3': '',
         'diode': '',
         'diode_static': '',
+        'clamp': '',
         'res_metal': '',
         'res': '',
         'mim': '',
@@ -801,6 +827,8 @@ jinja_env = Environment(
          'diode_scs': dio_spectre_fmt,
          'diode_cdl_static': dio_cdl_fmt_static,
          'diode_scs_static': dio_spectre_fmt_static,
+         'clamp_cdl': clamp_cdl_fmt,
+         'clamp_scs': clamp_spectre_fmt,
          'res_metal_cdl': res_metal_cdl_fmt,
          'res_metal_scs': res_metal_spectre_fmt,
          'res_cdl': res_cdl_fmt,
@@ -819,6 +847,8 @@ prefix_dict = {
     'diode_scs': 'X',
     'diode_cdl_static': 'X',
     'diode_scs_static': 'X',
+    'clamp_cdl': 'X',
+    'clamp_scs': 'X',
     'res_metal_cdl': 'R',
     'res_metal_scs': 'R',
     'res_cdl': 'R',
@@ -894,6 +924,32 @@ def populate_diode(config: Dict[str, Any], netlist_map: Dict[str, Any],
                         cell_name=cell_name,
                         model_name=_get_model_name(model_name, v.name),
                         ports=ports,
+                        param_list=param_list,
+                        prefix=_get_prefix(config, v, template_name),
+                    ))
+
+
+def populate_clamp(config: Dict[str, Any], netlist_map: Dict[str, Any],
+                   inc_lines: Dict[DesignOutput, List[str]]) -> None:
+    if 'types' not in config:
+        return
+    for cell_name, model_name in config['types']:
+        # populate netlist_map
+        cur_info = copy.deepcopy(clamp_default)
+        cur_info['cell_name'] = cell_name
+        netlist_map[cell_name] = cur_info
+
+        # write bag_prim netlist
+        for v, lines in inc_lines.items():
+            param_list = config[v.name]
+            template_name = supported_formats[v]['clamp']
+            if template_name:
+                jinja_template = jinja_env.get_template(template_name)
+                lines.append('\n')
+                lines.append(
+                    jinja_template.render(
+                        cell_name=cell_name,
+                        model_name=_get_model_name(model_name, v.name),
                         param_list=param_list,
                         prefix=_get_prefix(config, v, template_name),
                     ))
@@ -1016,6 +1072,8 @@ def get_info(config: Dict[str, Any], output_dir: Path
     if 'mos3' in config:
         populate_mos(config['mos3'], netlist_map, inc_lines, 'mos3')
     populate_diode(config['diode'], netlist_map, inc_lines)
+    if 'clamp' in config:
+        populate_clamp(config['clamp'], netlist_map, inc_lines)
     populate_res_metal(config['res_metal'], netlist_map, inc_lines)
     populate_res(config['res'], netlist_map, inc_lines)
     if 'mim' in config:

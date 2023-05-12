@@ -1362,6 +1362,29 @@ class ESDModuleBase(Module):
         return {}
 
 
+class ClampModuleBase(Module):
+    """The base design class for the bag primitive clamp.
+    """
+
+    def __init__(self, yaml_fname: str, database: ModuleDB, params: Param, **kwargs: Any) -> None:
+        Module.__init__(self, yaml_fname, database, params, **kwargs)
+        self._pins = dict(VDD=TermType.inout, VSS=TermType.inout)
+
+    @classmethod
+    def is_primitive(cls) -> bool:
+        return True
+
+    @classmethod
+    def get_params_info(cls) -> Mapping[str, str]:
+        return {}
+
+    def design(self) -> None:
+        pass
+
+    def get_schematic_parameters(self) -> Mapping[str, str]:
+        return {}
+
+
 class MIMModuleBase(Module):
     """The base design class for a mim cap parametrized by width, length, and number of units.
     """
@@ -1399,7 +1422,7 @@ class MIMModuleBase(Module):
         return dict(unit_width=wstr, unit_height=lstr, num_rows=str(num_rows), num_cols=str(num_cols))
 
     def get_cell_name_from_parameters(self) -> str:
-        return 'mim_{}'.format(self.params['intent'])
+        return f'mim_{self.params["intent"]}'
 
     def should_delete_instance(self) -> bool:
         return self.params['unit_width'] == 0 or self.params['unit_height'] == 0 or self.params['num_rows'] == 0 or \
