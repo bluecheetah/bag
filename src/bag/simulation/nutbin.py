@@ -389,6 +389,10 @@ def parse_sweep_file(file_path: Path, offset: int) -> Tuple[str, np.ndarray]:
         # the ASCII string before "sweep_direction" is the sweep variable name
         swp_name = name_find[sd_idx - 1]
 
+        # TODO: HACK - if swp_name has len == 1, it's not the actual swp_name; read the previous entry instead
+        if len(swp_name) == 1:
+            swp_name = name_find[sd_idx - 2]
+
         # find the location of the end of "grid" from the end
         val_idx = len(name_bin) - name_bin.find(b'grid') - 4
         val_idx -= offset  # extra offset to reach beginning of binary data
