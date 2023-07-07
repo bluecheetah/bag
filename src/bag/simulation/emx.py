@@ -208,10 +208,9 @@ class EMXInterface(EmSimProcessManager):
         mdl_opts, infile, outfiles = self._set_mdl_option(cell_name, model_type, model_path)
 
         # delete model file if exist -- use it for error checking
-        if outfiles[0].exists():
-            outfiles[0].unlink()
-        if outfiles[1].exists():
-            outfiles[1].unlink()
+        for _file in outfiles:
+            if _file.exists():
+                _file.unlink()
 
         # emx command
         mdl_cmd = [f'{os.environ["EMX_HOME"]}/bin/modelgen'] + mdl_opts
@@ -222,7 +221,10 @@ class EMXInterface(EmSimProcessManager):
                                                            log=f'{em_base_path}/bag_modelgen.log')
 
         # check whether ends correctly
-        if ret_code is None or ret_code != 0 or not outfiles[0].exists() or not outfiles[1].exists():
+        files_created = True
+        for _file in outfiles:
+            files_created = files_created and is_valid_file(_file, None, 60, 1)
+        if ret_code is None or ret_code != 0 or not files_created:
             raise Exception('Model generation stops with error.')
         else:
             period = (time.time() - start) / 60
