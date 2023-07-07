@@ -42,12 +42,14 @@ def parse_options() -> argparse.Namespace:
     parser.add_argument('lib_name', help='Library name.')
     parser.add_argument('cell_name', help='Cell name.')
     parser.add_argument('extract_type', nargs='?', default=None, help='Extraction type.')
+    parser.add_argument('extract_corner', nargs='?', default=None, help='Extraction corner.')
     args = parser.parse_args()
     return args
 
 
 def run_main(prj: BagProject, args: argparse.Namespace) -> None:
-    prj.extract_cell(lib_name=args.lib_name, cell_name=args.cell_name, extract_type=args.extract_type)
+    prj.extract_cell(lib_name=args.lib_name, cell_name=args.cell_name, extract_type=args.extract_type,
+                     extract_corner=args.extract_corner)
 
 
 if __name__ == '__main__':

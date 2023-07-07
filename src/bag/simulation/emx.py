@@ -262,6 +262,9 @@ def calculate_ind_q(model_path: Path, cell_name: str, center_tap: bool) -> None:
         qdiff = np.zeros(num)
         zdiff = np.zeros(num, dtype=np.complex_)
         for i, line in enumerate(lines):
+            if line[0] == '%':
+                # Reading a comment line, so skip it.
+                continue
             yparam = np.fromstring(line, sep=' ')
             # get frequency and real yparam
             freq[i] = yparam[0]

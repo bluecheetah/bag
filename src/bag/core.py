@@ -663,13 +663,21 @@ class BagProject:
 
         return final_netlist
 
-    def extract_cell(self, lib_name: str, cell_name: str, extract_type: Optional[str]) -> None:
+    def extract_cell(self, lib_name: str, cell_name: str, extract_type: Optional[str], extract_corner: Optional[str]
+                     ) -> None:
         print('running LVS...')
         lvs_passed, lvs_log = self.run_lvs(lib_name, cell_name, run_rcx=True)
         if lvs_passed:
             print('LVS passed!')
             print('running RCX...')
-            rcx_params = dict(extract_type=extract_type) if extract_type else None
+            rcx_params = {}
+            _suf = ''
+            if extract_type:
+                rcx_params['extract_type'] = extract_type
+                _suf += f'_{extract_type}'
+            if extract_type:
+                rcx_params['extract_corner'] = extract_corner
+                _suf += f'_{extract_corner}'
             final_netlist, rcx_log = self.run_rcx(lib_name, cell_name, params=rcx_params)
             if final_netlist:
                 print('RCX passed!')
@@ -677,11 +685,14 @@ class BagProject:
                 root_path.mkdir(parents=True, exist_ok=True)
                 if isinstance(final_netlist, list):
                     for f in final_netlist:
-                        to_file = str(root_path / Path(f).name)
+                        # there may be multiple suffixes
+                        _list = [str(root_path / Path(f).stem), _suf] + Path(f).suffixes
+                        to_file = ''.join(_list)
                         shutil.copy(f, to_file)
                         final_netlist = to_file
                 else:
-                    to_file = str(root_path / Path(final_netlist).name)
+                    _list = [str(root_path / Path(final_netlist).stem), _suf] + Path(final_netlist).suffixes
+                    to_file = ''.join(_list)
                     shutil.copy(final_netlist, to_file)
                     final_netlist = to_file
                 print(f'Extracted netlist is {final_netlist}')
