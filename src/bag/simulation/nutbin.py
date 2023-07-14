@@ -82,12 +82,23 @@ class NutBinParser:
 
         # read number of variables and points
         num_vars = int(f.readline().decode('ascii').split()[-1])
-        num_points = int(f.readline().decode('ascii').split()[-1])
+        # TODO: hack for an example case where '\n' goes missing after the next line
+        points_line = f.readline().decode('ascii').split()
+        if points_line[-1].isdigit():
+            num_points = int(points_line[-1])
+            next_line = None
+        else:
+            num_points = int(re.split('(\d+)', points_line[-4])[1])
+            next_line = points_line[-3:]
+            next_line.insert(0, 'Variables:')
 
         # get the variable names, ignore units and other flags
         var_names = []
         for idx in range(num_vars):
-            _line = f.readline().decode('ascii').split()
+            if idx == 0 and next_line:
+                _line = next_line
+            else:
+                _line = f.readline().decode('ascii').split()
             if idx == 0:
                 var_names.append(_line[2])
             else:
