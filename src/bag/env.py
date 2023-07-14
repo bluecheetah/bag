@@ -162,6 +162,14 @@ def create_routing_grid(tech_info: Optional[TechInfo] = None,
     return RoutingGrid(tech_info, tech_info.tech_params['tech_config_fname'])
 
 
+def create_routing_grid_from_file(config_fname: str, tech_info: Optional[TechInfo] = None,
+                                  bag_config: Optional[Dict[str, Any]] = None) -> RoutingGrid:
+    """Create RoutingGrid object from the given config file."""
+    if tech_info is None:
+        tech_info = create_tech_info(bag_config=bag_config)
+    return RoutingGrid(tech_info, config_fname)
+
+
 def can_connect_to_port(port: int) -> bool:
     """Check if we can successfully connect to a port.
 

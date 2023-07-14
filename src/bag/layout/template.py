@@ -52,6 +52,7 @@ from typing import (
 )
 from bag.typing import PointType
 from bag.util.search import BinaryIterator
+from bag.env import create_routing_grid_from_file
 
 import abc
 from itertools import product
@@ -223,11 +224,14 @@ class TemplateBase(DesignMaster):
         self.prim_bound_box: Optional[BBox] = None
 
         # get private attributes from parameters
-        tmp_grid: RoutingGrid = self.params['grid']
+        tmp_grid: Union[RoutingGrid, str] = self.params['grid']
         if tmp_grid is None:
             self._grid: RoutingGrid = temp_db.grid
         else:
-            self._grid: RoutingGrid = tmp_grid
+            if isinstance(tmp_grid, RoutingGrid):
+                self._grid: RoutingGrid = tmp_grid
+            else:
+                self._grid: RoutingGrid = create_routing_grid_from_file(tmp_grid)
 
         tmp_colors: TrackColoring = self.params['tr_colors']
         if tmp_colors is None:
@@ -634,7 +638,7 @@ class TemplateBase(DesignMaster):
             the new template instance.
         """
         if grid is None:
-            grid = self.grid
+            grid = params.get('grid', self.grid)
         show_pins = params.get('show_pins', show_pins)
         if isinstance(params, ImmutableSortedDict):
             params = params.copy(append=dict(grid=grid, show_pins=show_pins))
