@@ -945,6 +945,8 @@ class BagProject:
                     dut_params=gen_specs[params_key],
                     extract=extract,
                     export_lay=gen_cell_dut & extract,
+                    name_prefix=gen_specs.get('name_prefix', ''),
+                    name_suffix=gen_specs.get('name_suffix', ''),
                 )]
         impl_lib: str = gen_specs['impl_lib']
         root_dir: Union[str, Path] = gen_specs['root_dir']
@@ -977,6 +979,8 @@ class BagProject:
                     dut_params=_gen_specs[_params_key],
                     extract=_extract,
                     export_lay=gen_cell_dut & _extract,
+                    name_prefix=_gen_specs.get('name_prefix', ''),
+                    name_suffix=_gen_specs.get('name_suffix', ''),
                 ))
 
         meas_rel_dir: str = specs.get('meas_rel_dir', '')
