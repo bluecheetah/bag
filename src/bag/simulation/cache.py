@@ -148,10 +148,16 @@ class DesignDB(LoggingBase):
             if static_info:
                 _info = read_yaml(static_info)
                 cell_name: str = _info['cell_name']
-                ext_path = self._root_dir / cell_name
-                ext_path.mkdir(parents=True, exist_ok=True)
+                use_netlist: Optional[str] = dut_info.get('use_netlist')
+                if use_netlist is None:
+                    ext_path = self._root_dir / cell_name
+                    ext_path.mkdir(parents=True, exist_ok=True)
+                    ext_netlist = ext_path / 'rcx.sp'
+                else:
+                    ext_path = None
+                    ext_netlist = Path(use_netlist)
                 dut_pins = _info['in_terms'] + _info['out_terms'] + _info['io_terms']
-                dut = DesignInstance(_info['lib_name'], cell_name, None, None, ext_path / 'rcx.sp',
+                dut = DesignInstance(_info['lib_name'], cell_name, None, None, ext_netlist,
                                      [PySchCellViewInfo(static_info)], dut_pins)
             else:
                 dut, ext_path, is_cached = await self._create_dut(**dut_info)
