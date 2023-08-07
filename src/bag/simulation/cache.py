@@ -334,7 +334,7 @@ class DesignDB(LoggingBase):
                                                  exact_cell_names=exact_cell_names, flat=flat)
 
         return DesignInstance(self._sch_db.lib_name, impl_cell, sch_master, lay_master, ans, cv_info_out,
-                              list(sch_master.pins.keys())), extract_info, is_cached
+                              sch_master.ordered_pin_names), extract_info, is_cached
 
     async def gds_check_cache(self, gds_file: str, cur_dir: Path) -> bool:
         if not gds_file:
