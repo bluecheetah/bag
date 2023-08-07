@@ -928,11 +928,13 @@ class BagProject:
             params_key = 'dut_params'
         static_info: str = specs.get('static_info', '')
         if static_info:
-            if not extract:
-                raise ValueError('Only extracted views of static cells are supported. Since DUT is static, '
-                                 'please use "-x".')
+            use_netlist: Optional[str] = specs.get('use_netlist')
+            if use_netlist is None and not extract:
+                raise ValueError('Since DUT is static, please either provide a schematic or extracted netlist, or '
+                                 'use "-x" to extract the DUT from the Virtuoso library.')
             specs_list = [dict(
                 static_info=static_info,
+                use_netlist=use_netlist,
             )]
         else:
             if 'dut_class' not in gen_specs and 'lay_class' not in gen_specs:
@@ -965,12 +967,14 @@ class BagProject:
                 _params_key = 'dut_params'
             _static_info: str = _specs.get('static_info', '')
             if _static_info:
-                if not _extract:
-                    print('Only extracted views of static cells are supported. Since harness is static, '
-                          'it will be extracted.')
+                _use_netlist: Optional[str] = _specs.get('use_netlist')
+                if _use_netlist is None and not _extract:
+                    print('Since harness is static, and a schematic or extracted netlist is not provided, '
+                          'the harness will be extracted from the Virtuoso library.')
                 specs_list.append(dict(
                     static_info=_static_info,
-                    extract=True,
+                    use_netlist=_use_netlist,
+                    extract=_use_netlist is None,
                 ))
             else:
                 specs_list.append(dict(
