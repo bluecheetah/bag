@@ -55,7 +55,7 @@ import abc
 from pathlib import Path
 from itertools import zip_longest
 
-from pybag.core import PySchCellView, get_cv_header, get_cdba_name_bits
+from pybag.core import PySchCellView, get_cv_header
 from pybag.enum import TermType, SigType, DesignOutput, SupplyWrapMode, LogLevel
 
 from ..math import float_to_si_string
@@ -189,7 +189,8 @@ class Module(DesignMaster):
         # port order: input, output, inout
         _ports = {TermType.input: [], TermType.output: [], TermType.inout: []}
         for _name, _type in self.pins.items():
-            _ports[_type].extend(get_cdba_name_bits(_name))
+            # Do not split arrayed pin names into bits here. Use DesignInstance.pin_bit_names if needed.
+            _ports[_type].append(_name)
         pin_names = _ports[TermType.input] + _ports[TermType.output] + _ports[TermType.inout]
         return pin_names
 
