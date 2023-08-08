@@ -28,7 +28,7 @@ from pathlib import Path
 from dataclasses import dataclass
 
 from pybag.enum import DesignOutput, LogLevel
-from pybag.core import FileLogger, PySchCellViewInfo
+from pybag.core import FileLogger, PySchCellViewInfo, get_cdba_name_bits
 
 from ..env import get_gds_layer_map, get_gds_object_map
 from ..io.file import read_yaml, write_yaml, is_valid_file
@@ -63,6 +63,13 @@ class DesignInstance:
     @property
     def cache_name(self) -> str:
         return self.netlist_path.parent.name
+
+    @property
+    def pin_bit_names(self) -> Sequence[str]:
+        bit_names = []
+        for pin in self.pin_names:
+            bit_names.extend(get_cdba_name_bits(pin))
+        return bit_names
 
 
 @dataclass(frozen=True)
