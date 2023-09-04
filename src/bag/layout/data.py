@@ -59,7 +59,9 @@ class MOMCapInfo:
         return self._bot_dir if diff & 1 == 0 else self._bot_dir.perpendicular()
 
     def get_port_tr_w(self, layer: int) -> int:
-        return self._port_widths.get(layer, self._cap_info[layer][4])
+        port_tr_w0 = self._cap_info[layer][4]
+        port_tr_w1 = self._port_widths.get(layer, 1)
+        return max(port_tr_w0, port_tr_w1)
 
     def get_port_plow(self, layer: int) -> bool:
         return self._port_pleft.get(layer, False)

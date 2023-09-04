@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Union, Type, Mapping, Dict, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Any, Union, Type, Mapping, Dict, Optional, Sequence, cast, Tuple
 
 import abc
 import pprint
@@ -24,9 +24,11 @@ from copy import deepcopy
 
 from pybag.enum import LogLevel
 
+from ..core import BagProject
 from ..util.importlib import import_class
 from ..util.logging import LoggingBase
 from ..io.file import write_yaml
+from ..io import read_yaml
 from ..concurrent.core import batch_async_task
 from ..design.module import Module
 from ..layout.tech import TechInfo
@@ -37,10 +39,6 @@ from .measure import MeasurementManager
 from .cache import SimulationDB, SimResults, MeasureResult, DesignInstance
 
 from bag3_digital.measurement.liberty.io import generate_liberty
-from bag.io import read_yaml
-
-if TYPE_CHECKING:
-    from ..core import BagProject
 
 
 class DesignerBase(LoggingBase, abc.ABC):
@@ -90,25 +88,46 @@ class DesignerBase(LoggingBase, abc.ABC):
         return {}
 
     @classmethod
+    def get_dut_class_info(cls, gen_specs: Mapping[str, Any]) -> Tuple[bool, Union[Type[TemplateBase], Type[Module]]]:
+        """Returns information about the DUT generator class.
+
+        Parameters
+        ----------
+        specs : Param
+            The generator specs.
+
+        Returns
+        -------
+        is_lay : bool
+            True if the DUT generator is a layout generator, False if schematic generator.
+
+        dut_cls : Union[Type[TemplateBase], Type[Module]]
+            The DUT generator class.
+        """
+        is_lay, lay_cls, sch_cls = BagProject.get_dut_class_info(gen_specs)
+        return is_lay, lay_cls or sch_cls
+
+    @classmethod
     def design_cell(cls, prj: BagProject, specs: Mapping[str, Any], extract: bool = False,
-                    force_sim: bool = False, force_extract: bool = False, gen_sch: bool = False,
-                    log_level: LogLevel = LogLevel.DEBUG) -> None:
+                    force_sim: bool = False, force_extract: bool = False, gen_cell: bool = False,
+                    gen_cell_dut: bool = False, gen_cell_tb: bool = False, log_level: LogLevel = LogLevel.DEBUG
+                    ) -> None:
         dsn_str: Union[str, Type[DesignerBase]] = specs['dsn_class']
         root_dir: Union[str, Path] = specs['root_dir']
         impl_lib: str = specs['impl_lib']
         dsn_params: Mapping[str, Any] = specs['dsn_params']
         precision: int = specs.get('precision', 6)
+        gen_cell_dut |= gen_cell
+        gen_cell_tb |= gen_cell
 
         dsn_cls = cast(Type[DesignerBase], import_class(dsn_str))
-        if isinstance(root_dir, str):
-            root_path = Path(root_dir)
-        else:
-            root_path = root_dir
+        root_path = prj.get_root_path(root_dir)
 
         dsn_options = dict(
             extract=extract,
             force_extract=force_extract,
-            gen_sch=gen_sch,
+            gen_sch_dut=gen_cell_dut,
+            gen_sch_tb=gen_cell_tb,
             log_level=log_level,
         )
         log_file = str(root_path / 'dsn.log')
@@ -183,17 +202,24 @@ class DesignerBase(LoggingBase, abc.ABC):
         return self._sim_db.make_mm(mm_cls, meas_specs)
 
     async def async_batch_dut(self, dut_specs: Sequence[Mapping[str, Any]],
-                              ) -> Sequence[DesignInstance]:
-        return await self._sim_db.async_batch_design(dut_specs)
+                              rcx_params: Optional[Mapping[str, Any]] = None) -> Sequence[DesignInstance]:
+        return await self._sim_db.async_batch_design(dut_specs, rcx_params=rcx_params)
 
     async def async_new_dut(self, impl_cell: str,
-                            lay_cls: Union[Type[TemplateBase], Type[Module], str],
+                            dut_cls: Union[Type[TemplateBase], Type[Module], str],
                             dut_params: Mapping[str, Any], extract: Optional[bool] = None,
                             name_prefix: str = '', name_suffix: str = '',
                             flat: bool = False, export_lay: bool = False) -> DesignInstance:
-        return await self._sim_db.async_new_design(impl_cell, lay_cls, dut_params, extract=extract,
+        return await self._sim_db.async_new_design(impl_cell, dut_cls, dut_params, extract=extract,
                                                    name_prefix=name_prefix, name_suffix=name_suffix,
                                                    flat=flat, export_lay=export_lay)
+
+    async def async_new_em_dut(self, impl_cell: str, dut_cls: Union[Type[TemplateBase], str],
+                               dut_params: Mapping[str, Any], name_prefix: str = '', name_suffix: str = '',
+                               flat: bool = False, export_lay: bool = False) -> Tuple[DesignInstance, Path, bool]:
+        return await self._sim_db.async_new_em_design(impl_cell, dut_cls, dut_params,
+                                                      name_prefix=name_prefix, name_suffix=name_suffix,
+                                                      flat=flat, export_lay=export_lay)
 
     async def async_simulate_tbm_obj(self, sim_id: str, dut: Optional[DesignInstance],
                                      tbm: TestbenchManager, tb_params: Optional[Mapping[str, Any]],
@@ -204,3 +230,7 @@ class DesignerBase(LoggingBase, abc.ABC):
     async def async_simulate_mm_obj(self, sim_id: str, dut: Optional[DesignInstance],
                                     mm: MeasurementManager) -> MeasureResult:
         return await self._sim_db.async_simulate_mm_obj(sim_id, self._work_dir / sim_id, dut, mm)
+
+    async def async_gen_nport(self, dut: DesignInstance, gds_file: Path, gds_cached: bool, em_params: Mapping[str, Any],
+                              root_path: Path) -> Path:
+        return await self._sim_db.async_gen_nport(dut, gds_file, gds_cached, em_params, root_path)

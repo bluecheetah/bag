@@ -342,6 +342,13 @@ class TechInfo(PyTech):
         """
         return self.config['dnw_layers']
 
+    def has_res_metal(self) -> bool:
+        """Returns True if res_metal layers exist in this process"""
+        res_metal_layer_table = self.config.get('res_metal_layer_table', {})
+        if res_metal_layer_table:
+            return True
+        return False
+
     def get_res_metal_layers(self, layer_id: int) -> List[Tuple[str, str]]:
         """Returns a list of layers associated with the given metal resistor.
 
@@ -355,7 +362,9 @@ class TechInfo(PyTech):
         res_list : List[Tuple[str, str]]
             list of resistor layers.
         """
-        return self.config['res_metal_layer_table'][layer_id]
+        if self.has_res_metal():
+            return self.config['res_metal_layer_table'][layer_id]
+        raise ValueError('res_metal does not exist in the process.')
 
     def get_res_rsquare(self, res_type: str) -> float:
         """Returns R-square for the given resistor type.
@@ -730,3 +739,8 @@ class TechInfo(PyTech):
 
         # step 4: return answer
         return num_par, num_ser, wopt_unit, lopt_unit
+
+    @property
+    def has_guard_ring(self) -> bool:
+        """Returns True if this process has guard rings"""
+        return True

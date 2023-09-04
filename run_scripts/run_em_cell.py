@@ -28,20 +28,46 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# -*- coding: utf-8 -*-
+from typing import Mapping, Any
 
-from typing import Any
+import argparse
+
+from pybag.enum import LogLevel
+
+from bag.io import read_yaml
+from bag.core import BagProject
+from bag.util.misc import register_pdb_hook
+
+register_pdb_hook()
 
 
-from bag.design.module import {{ module_name }}
-from bag.design.database import ModuleDB
-from bag.util.immutable import Param
+def parse_options() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='Run EMX on cell from spec file.')
+    parser.add_argument('specs', help='Design specs file name.')
+    parser.add_argument('-q', '--quiet', action='store_true', default=False,
+                        help='Print only warning messages or above.')
+    parser.add_argument('--force_sim', action='store_true', default=False,
+                        help='Force simulation even if dut is unchanged')
+    args = parser.parse_args()
+    return args
 
 
-# noinspection PyPep8Naming
-class {{ lib_name }}__{{ cell_name }}({{ module_name }}):
-    """design module for {{ lib_name }}__{{ cell_name }}.
-    """
+def run_main(prj: BagProject, args: argparse.Namespace) -> None:
+    specs: Mapping[str, Any] = read_yaml(args.specs)
 
-    def __init__(self, database: ModuleDB, params: Param, **kwargs: Any) -> None:
-        {{ module_name }}.__init__(self, '', database, params, **kwargs)
+    log_level = LogLevel.WARN if args.quiet else LogLevel.INFO
+    prj.run_em_cell(specs, force_sim=args.force_sim, log_level=log_level)
+
+
+if __name__ == '__main__':
+    _args = parse_options()
+
+    local_dict = locals()
+    if 'bprj' not in local_dict:
+        print('creating BAG project')
+        _prj = BagProject()
+    else:
+        print('loading BAG project')
+        _prj = local_dict['bprj']
+
+    run_main(_prj, _args)

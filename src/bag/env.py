@@ -48,6 +48,7 @@ from typing import Tuple, Dict, Any, Optional, Type, List, cast
 
 import os
 import socket
+import string
 from pathlib import Path
 
 from .io.file import read_file, read_yaml_env, read_yaml
@@ -160,6 +161,14 @@ def create_routing_grid(tech_info: Optional[TechInfo] = None,
     if tech_info is None:
         tech_info = create_tech_info(bag_config=bag_config)
     return RoutingGrid(tech_info, tech_info.tech_params['tech_config_fname'])
+
+
+def create_routing_grid_from_file(config_fname: str, tech_info: Optional[TechInfo] = None,
+                                  bag_config: Optional[Dict[str, Any]] = None) -> RoutingGrid:
+    """Create RoutingGrid object from the given config file."""
+    if tech_info is None:
+        tech_info = create_tech_info(bag_config=bag_config)
+    return RoutingGrid(tech_info, string.Template(config_fname).substitute(os.environ))
 
 
 def can_connect_to_port(port: int) -> bool:

@@ -56,7 +56,7 @@ from pathlib import Path
 from itertools import zip_longest
 
 from pybag.core import PySchCellView, get_cv_header
-from pybag.enum import TermType, SigType, DesignOutput, SupplyWrapMode
+from pybag.enum import TermType, SigType, DesignOutput, SupplyWrapMode, LogLevel
 
 from ..math import float_to_si_string
 from ..util.cache import DesignMaster, Param, format_cell_name
@@ -80,14 +80,19 @@ class Module(DesignMaster):
         the design database object.
     params : Param
         the parameters dictionary.
+    log_file: str
+        the log file path.
+    log_level : LogLevel
+        the logging level.
     copy_state : Optional[Dict[str, Any]]
         If not None, set content of this master from this dictionary.
     **kwargs : Any
         optional arguments
     """
 
-    def __init__(self, yaml_fname: str, database: ModuleDB, params: Param, *,
-                 copy_state: Optional[Dict[str, Any]] = None, **kwargs: Any) -> None:
+    def __init__(self, yaml_fname: str, database: ModuleDB, params: Param, log_file: str, *,
+                 copy_state: Optional[Dict[str, Any]] = None, log_level: LogLevel = LogLevel.DEBUG,
+                 **kwargs: Any) -> None:
         self._cv: Optional[PySchCellView] = None
         if copy_state:
             self._netlist_dir: Optional[Path] = copy_state['netlist_dir']
@@ -116,10 +121,10 @@ class Module(DesignMaster):
                 self.instances: Dict[str, SchInstance] = {}
 
         # initialize schematic master
-        DesignMaster.__init__(self, database, params, copy_state=copy_state, **kwargs)
+        DesignMaster.__init__(self, database, params, log_file, log_level, copy_state=copy_state, **kwargs)
 
     @classmethod
-    def get_hidden_params(cls) -> Dict[str, Any]:
+    def get_hidden_params(cls) -> Mapping[str, Any]:
         ans = DesignMaster.get_hidden_params()
         ans['model_params'] = None
         return ans
@@ -152,7 +157,7 @@ class Module(DesignMaster):
     def get_master_basename(self) -> str:
         return self.orig_cell_name
 
-    def get_copy_state_with(self, new_params: Param) -> Dict[str, Any]:
+    def get_copy_state_with(self, new_params: Param) -> Mapping[str, Any]:
         base = DesignMaster.get_copy_state_with(self, new_params)
         new_cv = self._cv.get_copy()
         new_inst = {name: SchInstance(self.sch_db, ref, master=self.instances[name].master)
@@ -176,8 +181,18 @@ class Module(DesignMaster):
         return tech_info.resolution * tech_info.layout_unit
 
     @property
-    def pins(self) -> Dict[str, TermType]:
+    def pins(self) -> Mapping[str, TermType]:
         return self._pins
+
+    @property
+    def ordered_pin_names(self) -> Sequence[str]:
+        # port order: input, output, inout
+        _ports = {TermType.input: [], TermType.output: [], TermType.inout: []}
+        for _name, _type in self.pins.items():
+            # Do not split arrayed pin names into bits here. Use DesignInstance.pin_bit_names if needed.
+            _ports[_type].append(_name)
+        pin_names = _ports[TermType.input] + _ports[TermType.output] + _ports[TermType.inout]
+        return pin_names
 
     @abc.abstractmethod
     def design(self, **kwargs: Any) -> None:
@@ -350,7 +365,7 @@ class Module(DesignMaster):
         """
         return False
 
-    def get_schematic_parameters(self) -> Dict[str, str]:
+    def get_schematic_parameters(self) -> Mapping[str, str]:
         """Returns the schematic parameter dictionary of this instance.
 
         NOTE: This method is only used by BAG primitives, as they are
@@ -359,7 +374,7 @@ class Module(DesignMaster):
 
         Returns
         -------
-        params : Dict[str, str]
+        params : Mapping[str, str]
             the schematic parameter dictionary.
         """
         return {}
@@ -644,23 +659,67 @@ class Module(DesignMaster):
         template_names = {
             'analogLib': {
                 'cap': 'C{}',
+                'cccs': 'CCCS{}',
+                'ccvs': 'CCVS{}',
+                'dcblock': 'C{}',
+                'dcfeed': 'L{}',
                 'idc': 'IDC{}',
+                'ideal_balun': 'BAL{}',
+                'ind': 'L{}',
+                'iprobe': 'IPROBE{}',
+                'ipulse': 'IPULSE{}',
+                'ipwlf': 'IPWLF{}',
+                'isin': 'IAC{}',
+                'mind': 'K{}',
+                'n1port': 'NPORT{}',
+                'n2port': 'NPORT{}',
+                'n3port': 'NPORT{}',
+                'n4port': 'NPORT{}',
+                'n6port': 'NPORT{}',
+                'n8port': 'NPORT{}',
+                'n12port': 'NPORT{}',
+                'port': 'PORT{}',
                 'res': 'R{}',
+                'switch': 'W{}',
+                'vccs': 'VCCS{}',
                 'vcvs': 'VCVS{}',
                 'vdc': 'VDC{}',
                 'vpulse': 'VPULSE{}',
                 'vpwlf': 'VPWLF{}',
+                'vsin': 'VSIN{}',
             }
         }
         type_to_value_dict = {
             'analogLib': {
                 'cap': 'c',
+                'cccs': 'fgain',
+                'ccvs': 'hgain',
+                'dcblock': 'c',
+                'dcfeed': 'l',
                 'idc': 'idc',
+                'ideal_balun': None,
+                'ind': 'l',
+                'iprobe': None,
+                'ipulse': None,
+                'ipwlf': 'fileName',
+                'isin': 'acm',
+                'mind': None,
+                'n1port': 'dataFile',
+                'n2port': 'dataFile',
+                'n3port': 'dataFile',
+                'n4port': 'dataFile',
+                'n6port': 'dataFile',
+                'n8port': 'dataFile',
+                'n12port': 'dataFile',
+                'port': None,
                 'res': 'r',
+                'switch': None,
+                'vccs': 'ggain',
                 'vcvs': 'egain',
                 'vdc': 'vdc',
                 'vpulse': None,
                 'vpwlf': 'fileName',
+                'vsin': 'acm',
             },
         }
 
@@ -669,15 +728,20 @@ class Module(DesignMaster):
         for i, params_dict in enumerate(params_list):
             lib = params_dict.get('lib', 'analogLib')
             cell_type = params_dict['type']
-            value = params_dict['value']
+            value: Union[float, str, Mapping] = params_dict.get('value', {})
             conn_dict = params_dict['conns']
             if not isinstance(conn_dict, Mapping):
                 raise ValueError('Got a non dictionary for the connections in '
                                  'design_sources_and_loads')
 
-            if cell_type not in type_to_value_dict[lib]:
-                raise ValueError(f'Got an unsupported type {cell_type} for element type in '
-                                 f'design_sources_and_loads')
+            if lib in type_to_value_dict:
+                if cell_type not in type_to_value_dict[lib]:
+                    raise ValueError(f'Got an unsupported type {cell_type} for element type in '
+                                     f'design_sources_and_loads')
+            else:
+                if not isinstance(value, Mapping):
+                    raise ValueError(f'value must be dictionary if element type {cell_type} is not from supported '
+                                     f'libraries')
 
             # make sure value is either string or dictionary
             if isinstance(value, (int, float)):
@@ -703,7 +767,18 @@ class Module(DesignMaster):
                         raise ValueError(f'type not supported for key={key}, val={val} '
                                          f'with type {type(val)}')
 
-            tmp_name = template_names[lib].get(cell_type, 'X{}').format(i)
+            _name: Optional[str] = params_dict.get('name')
+            if lib in template_names:
+                tmp = template_names[lib].get(cell_type, 'X{}')
+            else:
+                tmp = 'X{}'
+            if _name:
+                if _name.startswith(tmp[:-2]):
+                    tmp_name = _name
+                else:
+                    raise ValueError(f'name={_name} must start with prefix={tmp[:-2]}')
+            else:
+                tmp_name = tmp.format(i)
             element_list.append((tmp_name, lib, cell_type, value_dict, conn_dict))
             name_list.append(tmp_name)
 
@@ -787,7 +862,7 @@ class Module(DesignMaster):
             the threshold flavor.
         m : str
             base name of the intermediate nodes.  the intermediate nodes will be named
-            'midX', where X is an non-negative integer.
+            'midX', where X is a non-negative integer.
         d : str
             the drain name.  Empty string to not rename.
         g : Union[str, List[str]]
@@ -879,6 +954,92 @@ class Module(DesignMaster):
 
                 self.array_instance(inst_name, inst_term_list=inst_term_list)
 
+    def design_resistor(self, inst_name: str, unit_params: Mapping[str, Any], nser: int = 1, npar: int = 1,
+                        plus: str = '', minus: str = '', mid: str = '', bulk: str = '',
+                        connect_mid: bool = True) -> None:
+        """Design a BAG_prim resistor (with series / parallel support).
+
+        This is a convenient method to design a resistor consisting of a series / parallel network of resistor units.
+        For series connections, additional resistors will be created on the right.
+
+        Parameters
+        ----------
+        inst_name : str
+            name of the BAG_prim resistor instance.
+        unit_params : int
+           Parameters of the unit resistor.
+        nser : int
+            number of resistor units in series.
+        npar : int
+            number of resistor units in parallel.
+        plus : str
+            the plus terminal name.  Empty string to not rename.
+        minus : str
+            the minus terminal name.  Empty string to not rename.
+        mid : str
+            base name of the intermediate nodes for series connection. The intermediate nodes will be named 'mid_X',
+            where X is a non-negative integer.
+        bulk : str
+            the bulk terminal name.  Empty string to not rename.
+        connect_mid : bool
+            True to connect intermediate nodes (i.e., resistor is constructed as a series of parallel units)
+            False to leave disconnected (i.e., resistor is constructed as series units in parallel)
+        """
+        inst = self.instances[inst_name]
+        inst.design(**unit_params)
+        if not issubclass(inst.master_class, ResPhysicalModuleBase):
+            raise ValueError('This method only works on BAG_prim resistors.')
+        if nser <= 0 or npar <= 0:
+            raise ValueError(f'nser={nser} and npar={npar} must be positive')
+
+        if not plus:
+            plus = inst.get_connection('PLUS')
+        if not minus:
+            minus = inst.get_connection('MINUS')
+        if not bulk:
+            bulk = inst.get_connection('BULK')
+
+        # series: array by adding more instances
+        if nser > 1:
+            if not mid:
+                raise ValueError('Intermediate node base name mid cannot be empty.')
+            inst_term_list = []
+            inst_names = []
+            for sidx in range(nser):
+                _name = f'{inst_name}_{sidx}'
+                inst_names.append(_name)
+                _minus = minus if sidx == 0 else f'{mid}_{sidx - 1}'
+                _plus = plus if sidx == nser - 1 else f'{mid}_{sidx}'
+                term_list = [('PLUS', _plus), ('MINUS', _minus)]
+                if inst.get_connection('BULK'):
+                    term_list.append(('BULK', bulk))
+                inst_term_list.append((_name, term_list))
+            self.array_instance(inst_name, inst_term_list=inst_term_list)
+        else:
+            inst_names = [inst_name]
+            term_net_iter = []
+            for name, rename in [('PLUS', plus), ('MINUS', minus), ('BULK', bulk)]:
+                if rename != inst.get_connection(name):
+                    term_net_iter.append((name, rename))
+            if term_net_iter:
+                self.reconnect_instance(inst_name, term_net_iter)
+
+        # parallel: array by naming
+        if npar > 1:
+            suf = f'<{npar - 1}:0>'
+            for _name in inst_names:
+                new_conns = {}
+                if not connect_mid:
+                    _inst = self.instances[_name]
+                    _minus = _inst.get_connection('MINUS')
+                    _plus = _inst.get_connection('PLUS')
+                    if _minus != minus:
+                        new_conns['MINUS'] = _minus + suf
+                    if _plus != plus:
+                        new_conns['PLUS'] = _plus + suf
+
+                self.rename_instance(_name, _name + suf, new_conns.items())
+
     def replace_with_ideal_switch(self, inst_name: str, rclosed: str = 'rclosed',
                                   ropen: str = 'ropen', vclosed: str = 'vclosed',
                                   vopen: str = 'vopen'):
@@ -934,7 +1095,7 @@ class Module(DesignMaster):
 
     def get_instance_hierarchy(self, output_type: DesignOutput,
                                leaf_cells: Optional[Dict[str, List[str]]] = None,
-                               default_view_name: str = '') -> Dict[str, Any]:
+                               default_view_name: str = '') -> Mapping[str, Any]:
         """Returns a nested dictionary representing the modeling instance hierarchy.
 
         By default, we try to netlist as deeply as possible.  This behavior can be modified by
@@ -951,7 +1112,7 @@ class Module(DesignMaster):
 
         Returns
         -------
-        hier : Dict[str, Any]
+        hier : Mapping[str, Any]
             the instance hierarchy dictionary.
         """
         is_leaf_table = {}
@@ -963,9 +1124,9 @@ class Module(DesignMaster):
         return self._get_hierarchy_helper(output_type, is_leaf_table, default_view_name)
 
     def _get_hierarchy_helper(self, output_type: DesignOutput,
-                              is_leaf_table: Dict[Tuple[str, str], bool],
+                              is_leaf_table: Mapping[Tuple[str, str], bool],
                               default_view_name: str,
-                              ) -> Optional[Dict[str, Any]]:
+                              ) -> Optional[Mapping[str, Any]]:
         model_path = self.get_model_path(output_type, default_view_name)
 
         key = (self._orig_lib_name, self._orig_cell_name)
@@ -1019,7 +1180,7 @@ class MosModuleBase(Module):
         return True
 
     @classmethod
-    def get_params_info(cls) -> Dict[str, str]:
+    def get_params_info(cls) -> Mapping[str, str]:
         return dict(
             w='transistor width, in resolution units or number of fins.',
             l='transistor length, in resolution units.',
@@ -1030,7 +1191,7 @@ class MosModuleBase(Module):
     def design(self, w: int, l: int, nf: int, intent: str) -> None:
         pass
 
-    def get_schematic_parameters(self) -> Dict[str, str]:
+    def get_schematic_parameters(self) -> Mapping[str, str]:
         w_res = self.tech_info.tech_params['mos']['width_resolution']
         l_res = self.tech_info.tech_params['mos']['length_resolution']
         scale = self.sch_scale
@@ -1048,14 +1209,25 @@ class MosModuleBase(Module):
 
     def get_cell_name_from_parameters(self) -> str:
         mos_type = self.orig_cell_name.split('_')[0]
-        return '{}_{}'.format(mos_type, self.params['intent'])
+        intent: str = self.params['intent']
+
+        # choose 3 terminal mos without extra parameter by encoding it in the intent
+        # e.g.: 3_standard
+        if intent.startswith('4_'):
+            # Case 1: changing to 4 terminal mos if schematic template has 3 terminal mos
+            return f'{mos_type[:-1]}{intent}'
+        if intent.startswith('3_'):
+            # Case 2: changing to 3 terminal mos if schematic template has 4 terminal mos
+            return f'{mos_type[:-1]}{intent}'
+        # Case 3: final mos is same as schematic template mos
+        return f'{mos_type}_{intent}'
 
     def should_delete_instance(self) -> bool:
         return self.params['nf'] == 0 or self.params['w'] == 0
 
 
 class DiodeModuleBase(Module):
-    """The base design class for the bag primitive transistor.
+    """The base design class for the bag primitive diode.
     """
 
     def __init__(self, yaml_fname: str, database: ModuleDB, params: Param, **kwargs: Any) -> None:
@@ -1067,7 +1239,7 @@ class DiodeModuleBase(Module):
         return True
 
     @classmethod
-    def get_params_info(cls) -> Dict[str, str]:
+    def get_params_info(cls) -> Mapping[str, str]:
         return dict(
             w='diode width, in resolution units or number of fins.',
             l='diode length, in resolution units or number of fingers.',
@@ -1077,7 +1249,7 @@ class DiodeModuleBase(Module):
     def design(self, w: int, l: int, intent: str) -> None:
         pass
 
-    def get_schematic_parameters(self) -> Dict[str, str]:
+    def get_schematic_parameters(self) -> Mapping[str, str]:
         w_res = self.tech_info.tech_params['diode']['width_resolution']
         l_res = self.tech_info.tech_params['diode']['length_resolution']
 
@@ -1113,7 +1285,7 @@ class ResPhysicalModuleBase(Module):
         return True
 
     @classmethod
-    def get_params_info(cls) -> Dict[str, str]:
+    def get_params_info(cls) -> Mapping[str, str]:
         return dict(
             w='resistor width, in resolution units.',
             l='resistor length, in resolution units.',
@@ -1123,7 +1295,7 @@ class ResPhysicalModuleBase(Module):
     def design(self, w: int, l: int, intent: str) -> None:
         pass
 
-    def get_schematic_parameters(self) -> Dict[str, str]:
+    def get_schematic_parameters(self) -> Mapping[str, str]:
         w: int = self.params['w']
         l: int = self.params['l']
         scale = self.sch_scale
@@ -1152,7 +1324,7 @@ class ResMetalModule(Module):
         return True
 
     @classmethod
-    def get_params_info(cls) -> Dict[str, str]:
+    def get_params_info(cls) -> Mapping[str, str]:
         return dict(
             w='resistor width, in resolution units.',
             l='resistor length, in resolution units.',
@@ -1162,7 +1334,7 @@ class ResMetalModule(Module):
     def design(self, w: int, l: int, layer: int) -> None:
         pass
 
-    def get_schematic_parameters(self) -> Dict[str, str]:
+    def get_schematic_parameters(self) -> Mapping[str, str]:
         w: int = self.params['w']
         l: int = self.params['l']
         scale = self.sch_scale
@@ -1175,3 +1347,93 @@ class ResMetalModule(Module):
 
     def should_delete_instance(self) -> bool:
         return self.params['w'] == 0 or self.params['l'] == 0
+
+
+class ESDModuleBase(Module):
+    """The base design class for the bag primitive esd (static).
+    """
+
+    def __init__(self, yaml_fname: str, database: ModuleDB, params: Param, **kwargs: Any) -> None:
+        Module.__init__(self, yaml_fname, database, params, **kwargs)
+        self._pins = dict(PLUS=TermType.inout, MINUS=TermType.inout, GUARD_RING=TermType.inout)
+
+    @classmethod
+    def is_primitive(cls) -> bool:
+        return True
+
+    @classmethod
+    def get_params_info(cls) -> Mapping[str, str]:
+        return {}
+
+    def design(self) -> None:
+        pass
+
+    def get_schematic_parameters(self) -> Mapping[str, str]:
+        return {}
+
+
+class ClampModuleBase(Module):
+    """The base design class for the bag primitive clamp.
+    """
+
+    def __init__(self, yaml_fname: str, database: ModuleDB, params: Param, **kwargs: Any) -> None:
+        Module.__init__(self, yaml_fname, database, params, **kwargs)
+        self._pins = dict(VDD=TermType.inout, VSS=TermType.inout)
+
+    @classmethod
+    def is_primitive(cls) -> bool:
+        return True
+
+    @classmethod
+    def get_params_info(cls) -> Mapping[str, str]:
+        return {}
+
+    def design(self) -> None:
+        pass
+
+    def get_schematic_parameters(self) -> Mapping[str, str]:
+        return {}
+
+
+class MIMModuleBase(Module):
+    """The base design class for a mim cap parametrized by width, length, and number of units.
+    """
+
+    def __init__(self, yaml_fname: str, database: ModuleDB, params: Param, **kwargs: Any) -> None:
+        Module.__init__(self, yaml_fname, database, params, **kwargs)
+        self._pins = dict(BOT=TermType.inout, TOP=TermType.inout)
+
+    @classmethod
+    def is_primitive(cls) -> bool:
+        return True
+
+    @classmethod
+    def get_params_info(cls) -> Mapping[str, str]:
+        return dict(
+            unit_width='mim width, in resolution units.',
+            unit_height='mim height, in resolution units.',
+            num_rows='Number of rows of unit mim.',
+            num_cols='Number of columns of unit mim.',
+            intent='mimcap flavor.',
+        )
+
+    def design(self, unit_width: int, unit_height: int, num_rows: int, num_cols: int, intent: str) -> None:
+        pass
+
+    def get_schematic_parameters(self) -> Mapping[str, str]:
+        w: int = self.params['unit_width']
+        l: int = self.params['unit_height']
+        scale = self.sch_scale
+        wstr = float_to_si_string(w * scale)
+        lstr = float_to_si_string(l * scale)
+        num_rows: int = self.params['num_rows']
+        num_cols: int = self.params['num_cols']
+
+        return dict(unit_width=wstr, unit_height=lstr, num_rows=str(num_rows), num_cols=str(num_cols))
+
+    def get_cell_name_from_parameters(self) -> str:
+        return f'mim_{self.params["intent"]}'
+
+    def should_delete_instance(self) -> bool:
+        return self.params['unit_width'] == 0 or self.params['unit_height'] == 0 or self.params['num_rows'] == 0 or \
+               self.params['num_cols'] == 0

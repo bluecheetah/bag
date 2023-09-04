@@ -53,6 +53,8 @@ import importlib
 import traceback
 from pathlib import Path
 
+from pybag.core import gds_equal
+
 from ..io.file import make_temp_dir, open_file, read_file
 from ..verification import make_checker
 from ..layout.routing.grid import RoutingGrid
@@ -511,7 +513,7 @@ class DbAccess(InterfaceBase, abc.ABC):
                 template = self._tmp_env.from_string(read_file(primitive_table[cell_name]))
                 return template.render(**param_dict)
             else:
-                if cell_name.startswith('nmos4_') or cell_name.startswith('pmos4_'):
+                if cell_name.startswith(('nmos', 'pmos')):
                     # transistor template
                     module_name = 'MosModuleBase'
                 elif cell_name.startswith('ndio_') or cell_name.startswith('pdio_'):
@@ -522,6 +524,15 @@ class DbAccess(InterfaceBase, abc.ABC):
                 elif cell_name.startswith('res_'):
                     # physical resistor template
                     module_name = 'ResPhysicalModuleBase'
+                elif cell_name.startswith('esd_'):
+                    # static esd template
+                    module_name = 'ESDModuleBase'
+                elif cell_name.startswith('clamp'):
+                    # supply clamp template
+                    module_name = 'ClampModuleBase'
+                elif cell_name.startswith('mim_'):
+                    # mim template
+                    module_name = 'MIMModuleBase'
                 else:
                     raise Exception('Unknown primitive cell: %s' % cell_name)
 
@@ -651,7 +662,8 @@ class DbAccess(InterfaceBase, abc.ABC):
         return ans
 
     def run_rcx(self, lib_name: str, cell_name: str,
-                params: Optional[Mapping[str, Any]] = None) -> Tuple[str, str]:
+                params: Optional[Mapping[str, Any]] = None,
+                **kwargs: Any) -> Tuple[str, str]:
         """run RC extraction on the given cell.
 
         Parameters
@@ -662,6 +674,8 @@ class DbAccess(InterfaceBase, abc.ABC):
             cell name.
         params : Optional[Dict[str, Any]]
             optional RCX parameter values.
+        **kwargs :
+            optional keyword arguments.  See DbAccess class for details.
 
         Returns
         -------
@@ -670,10 +684,40 @@ class DbAccess(InterfaceBase, abc.ABC):
         log_fname : str
             RCX log file name.
         """
-        coro = self.async_run_rcx(lib_name, cell_name, params=params)
+        coro = self.async_run_rcx(lib_name, cell_name, params=params, **kwargs)
         results = batch_async_task([coro])
         if results is None:
             return '', ''
+
+        ans = results[0]
+        if isinstance(ans, Exception):
+            raise ans
+        return ans
+
+    def import_layout(self, in_file: str, lib_name: str, cell_name: str, **kwargs: Any) -> str:
+        """Import layout.
+
+        Parameters
+        ----------
+        in_file : str
+            input file name.
+        lib_name : str
+            library name.
+        cell_name : str
+            cell name.
+        **kwargs : Any
+            optional keyword arguments.  See Checker class for details.
+
+        Returns
+        -------
+        log_fname : str
+            log file name.  Empty if task cancelled.
+        """
+        self.create_library(lib_name)
+        coro = self.async_import_layout(in_file, lib_name, cell_name, **kwargs)
+        results = batch_async_task([coro])
+        if results is None:
+            return ''
 
         ans = results[0]
         if isinstance(ans, Exception):
@@ -710,7 +754,7 @@ class DbAccess(InterfaceBase, abc.ABC):
         return ans
 
     def export_schematic(self, lib_name: str, cell_name: str, out_file: str, **kwargs: Any) -> str:
-        """Export layout.
+        """Export schematic.
 
         Parameters
         ----------
@@ -807,8 +851,54 @@ class DbAccess(InterfaceBase, abc.ABC):
             raise Exception('DRC/LVS/RCX is disabled.')
         return await self.checker.async_run_rcx(lib_name, cell_name, **kwargs)
 
-    async def async_export_layout(self, lib_name: str, cell_name: str,
-                                  out_file: str, **kwargs: Any) -> str:
+    async def async_run_lvl(self, gds_file: str, ref_file: str, **kwargs: Any) -> Tuple[bool, str]:
+        """A coroutine for running LVL with gds files.
+
+        Parameters
+        ----------
+        gds_file : str
+            name of the current gds to be compared.
+        ref_file : str
+            name of the reference gds file.
+        **kwargs : Any
+            optional keyword arguments.  See Checker class for details.
+
+        Returns
+        -------
+        value : bool
+            True if LVL succeeds
+        log_fname : str
+            name of the LVL log file.
+        """
+        if self.checker is None:
+            return gds_equal(gds_file, ref_file), ''
+        return await self.checker.async_run_lvl(gds_file, ref_file, **kwargs)
+
+    async def async_import_layout(self, in_file: str, lib_name: str, cell_name: str, **kwargs: Any) -> str:
+        """Import layout.
+
+        Parameters
+        ----------
+        in_file : str
+            input file name.
+        lib_name : str
+            library name.
+        cell_name : str
+            cell name.
+        **kwargs : Any
+            optional keyword arguments.  See Checker class for details.
+
+        Returns
+        -------
+        log_fname : str
+            log file name.  Empty if task cancelled.
+        """
+        if self.checker is None:
+            raise Exception('layout import is disabled.')
+
+        return await self.checker.async_import_layout(in_file, lib_name, cell_name, **kwargs)
+
+    async def async_export_layout(self, lib_name: str, cell_name: str, out_file: str, **kwargs: Any) -> str:
         """Export layout.
 
         Parameters
@@ -832,8 +922,7 @@ class DbAccess(InterfaceBase, abc.ABC):
 
         return await self.checker.async_export_layout(lib_name, cell_name, out_file, **kwargs)
 
-    async def async_export_schematic(self, lib_name: str, cell_name: str,
-                                     out_file: str, **kwargs: Any) -> str:
+    async def async_export_schematic(self, lib_name: str, cell_name: str, out_file: str, **kwargs: Any) -> str:
         if self.checker is None:
             raise Exception('schematic export is disabled.')
 

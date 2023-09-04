@@ -51,6 +51,7 @@ from typing import TYPE_CHECKING, Optional, List, Dict, Any, Sequence, Tuple, Un
 from pathlib import Path
 
 from ..io import read_file, write_file
+from ..io.file import is_valid_file
 
 from .virtuoso import VirtuosoChecker
 
@@ -80,6 +81,9 @@ class PVS(VirtuosoChecker):
     source_added_file : str
         the Calibre source.added file location.  Environment variable is supported.
         If empty (default), this is not configured.
+    import_ref_lib : str
+        the import reference libraries list file location.  Environment variable is supported.
+        If empty (default), this is not configured.
     cancel_timeout_ms : int
         cancel timeout in milliseconds.
     enable_color : bool
@@ -89,11 +93,11 @@ class PVS(VirtuosoChecker):
     def __init__(self, tmp_dir: str, root_dir: Dict[str, str], template: Dict[str, str],
                  env_vars: Dict[str, Dict[str, str]], link_files: Dict[str, List[str]],
                  params: Dict[str, Dict[str, Any]],
-                 lvs_cmd: str = 'pvs', max_workers: int = 0, source_added_file: str = '',
-                 cancel_timeout_ms: int = 10000, enable_color: bool = False) -> None:
+                 lvs_cmd: str = 'pvs', max_workers: int = 0, source_added_file: str = '', import_ref_lib: str = '',
+                 cancel_timeout_ms: int = 10000, enable_color: bool = False, **kwargs: Dict[str, Any]) -> None:
         VirtuosoChecker.__init__(self, tmp_dir, root_dir, template, env_vars, link_files,
-                                 params, max_workers, source_added_file, cancel_timeout_ms,
-                                 enable_color)
+                                 params, max_workers, source_added_file, import_ref_lib, cancel_timeout_ms,
+                                 enable_color, **kwargs)
 
         self._lvs_cmd = lvs_cmd
 
@@ -137,20 +141,21 @@ class PVS(VirtuosoChecker):
 
         return flow_list
 
-    def setup_rcx_flow(self, lib_name: str, cell_name: str,
+    def setup_rcx_flow(self, lib_name: str, cell_name: str, sch_view: str = 'schematic',
+                       lay_view: str = 'layout', layout: str = '', netlist: str = '',
                        params: Optional[Dict[str, Any]] = None, run_dir: Union[str, Path] = ''
                        ) -> Sequence[FlowInfo]:
         # noinspection PyUnusedLocal
         def _rcx_passed_check(retcode: int, log_file: str) -> Tuple[str, str]:
             out_file = Path(log_file).parent.resolve()
             out_file = out_file.joinpath(f'{cell_name}.spf')
-            if not out_file.is_file():
-                return '', ''
+            if not is_valid_file(out_file, None, 60, 1):
+                return '', log_file
 
-            return str(out_file), str(log_file)
+            return str(out_file), log_file
 
         mode = 'rcx'
-        tmp = self.setup_job(mode, lib_name, cell_name, None, None, '', '', params, run_dir)
+        tmp = self.setup_job(mode, lib_name, cell_name, layout, netlist, lay_view, sch_view, params, run_dir)
         flow_list, run_dir, run_env, params, ctl_params = tmp
 
         ctl_path = run_dir / f'bag_{mode}.ctrl'
@@ -185,8 +190,8 @@ def _lvs_passed_check(retcode: int, log_file: str) -> Tuple[bool, str]:
         the log file name.
     """
     fpath = Path(log_file)
-    if not fpath.is_file():
-        return False, ''
+    if not is_valid_file(fpath, 'PVS Comparison Finished.', 60, 1):
+        return False, log_file if fpath.is_file() else ''
 
     cmd_output = read_file(fpath)
     test_str = '# Run Result             : MATCH'

@@ -182,10 +182,10 @@ class Instance(NetlistNode):
     def netlist_with_offset(self, stream: TextIO, used_names: Set[str], offset_map: Dict[str, str],
                             netlist_type: DesignOutput, ports: List[str], bag_mos: Set[str], pdk_mos: Set[str]
                             ) -> None:
-        if self._cell_name in bag_mos:
+        if any(self._cell_name.startswith(mos_name) for mos_name in bag_mos):
             bag_mos = True
             body, drain, gate, source = self._ports
-        elif self._cell_name in pdk_mos:
+        elif any(self._cell_name.startswith(mos_name) for mos_name in pdk_mos):
             bag_mos = False
             drain, gate, source, body = self._ports
         else:
@@ -220,11 +220,10 @@ class Instance(NetlistNode):
 
             vdc_name = f'V{offset_v_port}{sep}{index}'
 
-            for port in ports:
-                if netlist_type is DesignOutput.SPECTRE:
-                    tmp_list = [vdc_name, new_mapping[port], old_mapping[port], 'vsource', 'type=dc', f'dc={offset_v_port}']
-                else:
-                    tmp_list = [vdc_name, new_mapping[port], old_mapping[port], offset_v_port]
+            if netlist_type is DesignOutput.SPECTRE:
+                tmp_list = [vdc_name, new_mapping[port], old_mapping[port], 'vsource', 'type=dc', f'dc={offset_v_port}']
+            else:
+                tmp_list = [vdc_name, new_mapping[port], old_mapping[port], offset_v_port]
 
             stream.write(wrap_string(tmp_list))
 
@@ -424,7 +423,6 @@ class ParserSpectre(Parser):
         if ports is None:
             # did not hit parameters, assume last index is cell name
             ports = tokens[1:end_idx]
-            end_idx -= 1
 
         cell_name = tokens[end_idx]
         params = tokens[end_idx+1:]

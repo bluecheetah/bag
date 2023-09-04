@@ -80,7 +80,7 @@ from .simulation.measure import MeasurementManager
 from .simulation.cache import SimulationDB, DesignDB
 
 if TYPE_CHECKING:
-    from .simulation.base import SimAccess
+    from .simulation.base import SimAccess, EmSimAccess
 
 
 class BagProject:
@@ -133,6 +133,13 @@ class BagProject:
         sim_cls = cast(Type['SimAccess'], import_class(self.bag_config['simulation']['class']))
         self._sim = sim_cls(bag_tmp_dir, self.bag_config['simulation'])
 
+        # make EmSimAccess instance if it is defined in bag_config.yaml
+        if 'em_simulation' in self.bag_config:
+            em_sim_cls = cast(Type['EmSimAccess'], import_class(self.bag_config['em_simulation']['class']))
+            self._em_sim = em_sim_cls(bag_tmp_dir, self.bag_config['em_simulation'])
+        else:
+            self._em_sim = None
+
         # make LEFInterface instance
         self._lef: Optional[LEFInterface] = None
         lef_config = self.bag_config.get('lef', None)
@@ -157,6 +164,10 @@ class BagProject:
     @property
     def sim_access(self) -> SimAccess:
         return self._sim
+
+    @property
+    def em_sim_access(self) -> Optional[EmSimAccess]:
+        return self._em_sim
 
     def close_bag_server(self) -> None:
         """Close the BAG database server."""
@@ -217,37 +228,41 @@ class BagProject:
         """
         return self.impl_db.get_cells_in_library(lib_name)
 
-    def make_template_db(self, impl_lib: str, **kwargs: Any) -> TemplateDB:
+    def make_template_db(self, log_file: str, impl_lib: str, **kwargs: Any) -> TemplateDB:
         """Create and return a new TemplateDB instance.
 
         Parameters
         ----------
+        log_file: str
+            the log file path.
         impl_lib : str
             the library name to put generated layouts in.
         **kwargs : Any
             optional TemplateDB parameters.
         """
-        return TemplateDB(self.grid, impl_lib, prj=self, **kwargs)
+        return TemplateDB(self.grid, impl_lib, log_file, prj=self, **kwargs)
 
-    def make_module_db(self, impl_lib: str, **kwargs: Any) -> ModuleDB:
+    def make_module_db(self, log_file: str, impl_lib: str, **kwargs: Any) -> ModuleDB:
         """Create and return a new ModuleDB instance.
 
         Parameters
         ----------
+        log_file: str
+            the log file path.
         impl_lib : str
             the library name to put generated layouts in.
         **kwargs : Any
             optional ModuleDB parameters.
         """
-        return ModuleDB(self.tech_info, impl_lib, prj=self, **kwargs)
+        return ModuleDB(self.tech_info, impl_lib, log_file, prj=self, **kwargs)
 
     def make_dsn_db(self, root_dir: Path, log_file: str, impl_lib: str,
                     sch_db: Optional[ModuleDB] = None, lay_db: Optional[TemplateDB] = None,
                     **kwargs: Any) -> DesignDB:
         if sch_db is None:
-            sch_db = self.make_module_db(impl_lib)
+            sch_db = self.make_module_db(log_file, impl_lib)
         if lay_db is None:
-            lay_db = self.make_template_db(impl_lib)
+            lay_db = self.make_template_db(log_file, impl_lib)
 
         dsn_db = DesignDB(root_dir, log_file, self.impl_db, self.sim_access.netlist_type,
                           sch_db, lay_db, **kwargs)
@@ -262,6 +277,58 @@ class BagProject:
         dsn_db = self.make_dsn_db(dsn_dir, log_file, impl_lib, **dsn_options)
         sim_db = SimulationDB(log_file, dsn_db, **kwargs)
         return sim_db
+
+    def get_root_path(self, root_dir: Union[str, Path], use_sim_path: bool = True) -> Path:
+        if isinstance(root_dir, str):
+            root_path = Path(root_dir)
+        else:
+            root_path = root_dir
+        if not root_path.is_absolute() and use_sim_path:
+            root_path = self._sim._dir_path / root_path
+        return root_path.resolve()
+
+    @staticmethod
+    def get_dut_class_info(specs: Mapping[str, Any]) -> Tuple[bool, Optional[Type[TemplateBase]],
+                                                              Optional[Type[Module]]]:
+        """Returns information about the DUT generator class.
+
+        Parameters
+        ----------
+        specs : Param
+            The generator specs.
+
+        Returns
+        -------
+        is_lay : bool
+            True if the DUT generator is a layout generator, False if schematic generator.
+
+        lay_cls : Optional[Type[TemplateBase]]
+            The DUT layout generator class, if applicable. If schematic generator, then evaluates to None.
+
+        sch_cls : Optional[Type[Module]]
+            The DUT schematic generator class. If sch_class is not specified in specs, then evaluates to None.
+        """
+
+        dut_str: Union[str, Type[TemplateBase], Type[Module]] = specs.get('dut_class') or specs.get('lay_class', '')
+        sch_str: Union[str, Type[Module]] = specs.get('sch_class', '')
+        dut_cls = import_class(dut_str)
+        if issubclass(dut_cls, TemplateBase):
+            lay_cls = dut_cls
+            is_lay = True
+        elif issubclass(dut_cls, Module):
+            lay_cls = None
+            sch_str = dut_cls
+            is_lay = False
+        else:
+            raise ValueError(f"Invalid generator class {dut_cls.get_qualified_name()}")
+
+        if isinstance(sch_str, str):
+            # no schematic class from layout, try get it from string
+            sch_cls = cast(Type[Module], import_class(sch_str)) if sch_str else None
+        else:
+            sch_cls = sch_str
+
+        return is_lay, lay_cls, sch_cls
 
     def generate_cell(self, specs: Dict[str, Any],
                       raw: bool = False,
@@ -300,6 +367,8 @@ class BagProject:
             gds_file : str
                 override the default GDS layout file name.  Note that specifying this entry does
                 not mean a GDS file will be created, you must set raw = True or gen_gds = True.
+            rcx_params : Optional[Dict[str, Any]]
+                Extra rcx parameters that users can override.
 
         raw : bool
             True to generate GDS and netlist files instead of OA cellviews.
@@ -343,8 +412,7 @@ class BagProject:
             the extraction netlist.  Empty on error or if extraction is not run.
         """
         root_dir: Union[str, Path] = specs.get('root_dir', '')
-        lay_str: Union[str, Type[TemplateBase]] = specs.get('lay_class', '')
-        sch_str: Union[str, Type[Module]] = specs.get('sch_class', '')
+        has_lay, lay_cls, sch_cls = self.get_dut_class_info(specs)
         impl_lib: str = specs['impl_lib']
         impl_cell: str = specs['impl_cell']
         params: Optional[Mapping[str, Any]] = specs.get('params', None)
@@ -357,6 +425,7 @@ class BagProject:
         default_model_view: str = specs.get('default_model_view', '')
         hierarchy_file: str = specs.get('hierarchy_file', '')
         model_params: Mapping[str, Any] = specs.get('model_params', {})
+        rcx_params: Optional[Mapping[str, Any]] = specs.get('rcx_params', None)
         sup_wrap_mode: str = specs.get('model_supply_wrap_mode', 'NONE')
         lef_config: Mapping[str, Any] = specs.get('lef_config', {})
         name_prefix: str = specs.get('name_prefix', '')
@@ -373,24 +442,14 @@ class BagProject:
         else:
             lay_type_list: List[DesignOutput] = [DesignOutput[v] for v in lay_type_specs]
 
-        if isinstance(root_dir, str):
-            root_path = Path(root_dir)
-        else:
-            root_path = root_dir
-
-        if lay_str == '':
-            has_lay = False
-            lay_cls = None
-        else:
-            lay_cls = cast(Type[TemplateBase], import_class(lay_str))
-            has_lay = True
+        root_path = self.get_root_path(root_dir, use_sim_path=False)
+        log_file = str(root_path / 'gen.log')
 
         gen_lay = gen_lay and has_lay
         gen_model = gen_model and model_params
         run_drc = run_drc and gen_lay
 
         verilog_shell_path = root_path / f'{impl_cell}_shell.v' if gen_lef or gen_shell else None
-        sch_cls = None
         layout_ext = lay_type_list[0].extension
         layout_file = ''
         lef_options = {}
@@ -398,14 +457,13 @@ class BagProject:
             raise ValueError('Conflict between layout file type and layout file name.')
         if has_lay:
             if lay_db is None:
-                lay_db = self.make_template_db(impl_lib, name_prefix=name_prefix,
-                                               name_suffix=name_suffix)
+                lay_db = self.make_template_db(log_file, impl_lib, name_prefix=name_prefix, name_suffix=name_suffix)
 
             print('computing layout...')
             lay_master: TemplateBase = lay_db.new_template(lay_cls, params=params)
             lay_master.get_lef_options(lef_options, lef_config)
             # try getting schematic class from instance, if possible
-            sch_cls = lay_master.get_schematic_class_inst()
+            sch_cls = lay_master.get_schematic_class_inst() or sch_cls
             dut_list = [(lay_master, impl_cell)]
             print('computation done.')
 
@@ -446,13 +504,6 @@ class BagProject:
                 self.impl_db.export_layout(impl_lib, impl_cell, cur_file,
                                            params=export_params)
 
-        if sch_cls is None:
-            if isinstance(sch_str, str):
-                if sch_str:
-                    # no schematic class from layout, try get it from string
-                    sch_cls = cast(Type[Module], import_class(sch_str))
-            else:
-                sch_cls = sch_str
         has_sch = sch_cls is not None
 
         run_lvs = (run_lvs or run_rcx) and gen_lay and has_sch
@@ -473,7 +524,7 @@ class BagProject:
 
         if gen_sch:
             if sch_db is None:
-                sch_db = self.make_module_db(impl_lib, name_prefix=name_prefix,
+                sch_db = self.make_module_db(log_file, impl_lib, name_prefix=name_prefix,
                                              name_suffix=name_suffix)
 
             print('computing schematic...')
@@ -573,10 +624,13 @@ class BagProject:
 
         if lvs_passed and run_rcx:
             print('running RCX...')
-            final_netlist, rcx_log = self.run_rcx(impl_lib, gen_cell_name)
+            final_netlist, rcx_log = self.run_rcx(impl_lib, gen_cell_name, params=rcx_params,
+                                                  layout=layout_file, netlist=lvs_netlist)
             final_netlist_type = DesignOutput.CDL
             if final_netlist:
                 print('RCX passed!')
+                if not raw:
+                    root_path.mkdir(parents=True, exist_ok=True)
                 if isinstance(final_netlist, list):
                     for f in final_netlist:
                         to_file = str(root_path / Path(f).name)
@@ -608,6 +662,44 @@ class BagProject:
             add_mismatch_offsets(final_netlist, final_netlist, final_netlist_type)
 
         return final_netlist
+
+    def extract_cell(self, lib_name: str, cell_name: str, extract_type: Optional[str], extract_corner: Optional[str]
+                     ) -> None:
+        print('running LVS...')
+        lvs_passed, lvs_log = self.run_lvs(lib_name, cell_name, run_rcx=True)
+        if lvs_passed:
+            print('LVS passed!')
+            print('running RCX...')
+            rcx_params = {}
+            _suf = ''
+            if extract_type:
+                rcx_params['extract_type'] = extract_type
+                _suf += f'_{extract_type}'
+            if extract_type:
+                rcx_params['extract_corner'] = extract_corner
+                _suf += f'_{extract_corner}'
+            final_netlist, rcx_log = self.run_rcx(lib_name, cell_name, params=rcx_params)
+            if final_netlist:
+                print('RCX passed!')
+                root_path = self.get_root_path(Path(f'gen_outputs/{lib_name}/{cell_name}'), use_sim_path=False)
+                root_path.mkdir(parents=True, exist_ok=True)
+                if isinstance(final_netlist, list):
+                    for f in final_netlist:
+                        # there may be multiple suffixes
+                        _list = [str(root_path / Path(f).stem), _suf] + Path(f).suffixes
+                        to_file = ''.join(_list)
+                        shutil.copy(f, to_file)
+                        final_netlist = to_file
+                else:
+                    _list = [str(root_path / Path(final_netlist).stem), _suf] + Path(final_netlist).suffixes
+                    to_file = ''.join(_list)
+                    shutil.copy(final_netlist, to_file)
+                    final_netlist = to_file
+                print(f'Extracted netlist is {final_netlist}')
+            else:
+                raise ValueError(f'RCX failed... log file: {rcx_log}')
+        else:
+            raise ValueError(f'LVS failed... log file: {lvs_log}')
 
     def replace_dut_in_wrapper(self, params: Mapping[str, Any], dut_lib: str,
                                dut_cell: str) -> Mapping[str, Any]:
@@ -675,9 +767,15 @@ class BagProject:
         sim_result : str
             simulation result file name.
         """
-        root_dir: Union[str, Path] = specs['root_dir']
-        impl_lib: str = specs['impl_lib']
-        impl_cell: str = specs['impl_cell']
+        gen_specs_file: str = specs.get('gen_specs_file', '')
+        if gen_specs_file:
+            gen_specs: Mapping[str, Any] = read_yaml(gen_specs_file)
+        else:
+            gen_specs = specs
+
+        root_dir: Union[str, Path] = gen_specs['root_dir']
+        impl_lib: str = gen_specs['impl_lib']
+        impl_cell: str = gen_specs['impl_cell']
         use_netlist: str = specs.get('use_netlist', '')
         precision: int = specs.get('precision', 6)
         tb_params: Dict[str, Any] = specs.get('tb_params', {}).copy()
@@ -693,10 +791,8 @@ class BagProject:
             tb_params['dut_lib'] = impl_lib
             tb_params['dut_cell'] = impl_cell
 
-        if isinstance(root_dir, str):
-            root_path = Path(root_dir).resolve()
-        else:
-            root_path = root_dir
+        root_path = self.get_root_path(root_dir, use_sim_path=True)
+        log_file = str(root_path / 'sim.log')
 
         netlist_type = self._sim.netlist_type
         tb_netlist_path = root_path / f'tb.{netlist_type.extension}'
@@ -708,7 +804,7 @@ class BagProject:
                 raise ValueError('impl_cell is empty.')
 
             if sch_db is None:
-                sch_db = self.make_module_db(impl_lib)
+                sch_db = self.make_module_db(log_file, impl_lib)
 
             if use_netlist:
                 use_netlist_path = Path(use_netlist)
@@ -733,8 +829,8 @@ class BagProject:
             has_netlist = use_netlist_path is not None and use_netlist_path.is_file()
             extract = extract and not has_netlist
             if not cv_info_list:
-                gen_netlist = self.generate_cell(specs, raw=raw, gen_lay=extract, gen_sch=True,
-                                                 run_lvs=extract, run_rcx=extract,
+                gen_netlist = self.generate_cell(gen_specs, raw=raw, gen_lay=extract, gen_sch=True,
+                                                 run_lvs=extract, run_rcx=extract, gen_netlist=True,
                                                  sim_netlist=True, sch_db=sch_db, lay_db=lay_db,
                                                  cv_info_out=cv_info_list, mismatch=mismatch)
                 if use_netlist_path is None:
@@ -766,7 +862,7 @@ class BagProject:
 
                 tbm = tbm_cls(self._sim, root_path, 'tb_sim', impl_lib,
                               tbm_specs, [], sim_envs, precision=precision)
-                tbm.setup(sch_db, tb_params, cv_info_list, use_netlist_path, gen_sch=not raw)
+                tbm.setup(sch_db, tb_params, cv_info_list, [use_netlist_path], gen_sch=not raw)
             else:
                 # setup testbench using spec file
                 tb_lib: str = specs['tb_lib']
@@ -782,7 +878,7 @@ class BagProject:
                 fname = '' if use_netlist_path is None else str(use_netlist_path)
                 sch_db.batch_schematic(dut_list, output=netlist_type, top_subckt=False,
                                        fname=str(tb_netlist_path), cv_info_list=cv_info_list,
-                                       cv_netlist=fname)
+                                       cv_netlist_list=[fname])
                 if not raw:
                     sch_db.batch_schematic(dut_list, output=DesignOutput.SCHEMATIC)
                 sim_info = netlist_info_from_dict(sim_info_dict)
@@ -810,37 +906,89 @@ class BagProject:
 
         return sim_result
 
-    def measure_cell(self, specs: Mapping[str, Any], extract: bool = False,
-                     force_sim: bool = False, force_extract: bool = False, gen_sch: bool = False,
-                     fake: bool = False, log_level: LogLevel = LogLevel.DEBUG) -> None:
+    def measure_cell(self, specs: Mapping[str, Any], extract: bool = False, force_sim: bool = False,
+                     force_extract: bool = False, gen_cell: bool = False, gen_cell_dut: bool = False,
+                     gen_cell_tb: bool = False, fake: bool = False, log_level: LogLevel = LogLevel.DEBUG) -> None:
         meas_str: Union[str, Type[MeasurementManager]] = specs['meas_class']
         meas_name: str = specs['meas_name']
         meas_params: Dict[str, Any] = specs['meas_params']
         precision: int = specs.get('precision', 6)
+        rcx_params: Optional[Mapping[str, Any]] = specs.get('rcx_params', None)
+        gen_cell_dut |= gen_cell
+        gen_cell_tb |= gen_cell
 
+        # DUT
+        no_dut = False
         gen_specs_file: str = specs.get('gen_specs_file', '')
         if gen_specs_file:
             gen_specs: Mapping[str, Any] = read_yaml(gen_specs_file)
-            lay_str: Union[str, Type[TemplateBase]] = gen_specs['lay_class']
-            impl_lib: str = gen_specs['impl_lib']
-            impl_cell: str = gen_specs['impl_cell']
-            dut_params: Mapping[str, Any] = gen_specs['params']
-            root_dir: Union[str, Path] = gen_specs['root_dir']
-            meas_rel_dir: str = specs.get('meas_rel_dir', '')
+            params_key = 'params'
         else:
-            lay_str: Union[str, Type[TemplateBase]] = specs['lay_class']
-            impl_lib: str = specs['impl_lib']
-            impl_cell: str = specs['impl_cell']
-            dut_params: Mapping[str, Any] = specs['dut_params']
-            root_dir: Union[str, Path] = specs['root_dir']
-            meas_rel_dir: str = specs.get('meas_rel_dir', '')
+            gen_specs = specs
+            params_key = 'dut_params'
+        static_info: str = specs.get('static_info', '')
+        if static_info:
+            use_netlist: Optional[str] = specs.get('use_netlist')
+            if use_netlist is None and not extract:
+                raise ValueError('Since DUT is static, please either provide a schematic or extracted netlist, or '
+                                 'use "-x" to extract the DUT from the Virtuoso library.')
+            specs_list = [dict(
+                static_info=static_info,
+                use_netlist=use_netlist,
+            )]
+        else:
+            if 'dut_class' not in gen_specs and 'lay_class' not in gen_specs:
+                no_dut = True
+                specs_list = []
+            else:
+                specs_list = [dict(
+                    impl_cell=gen_specs['impl_cell'],
+                    dut_cls=gen_specs.get('dut_class') or gen_specs['lay_class'],
+                    dut_params=gen_specs[params_key],
+                    extract=extract,
+                    export_lay=gen_cell_dut & extract,
+                    name_prefix=gen_specs.get('name_prefix', ''),
+                    name_suffix=gen_specs.get('name_suffix', ''),
+                )]
+        impl_lib: str = gen_specs['impl_lib']
+        root_dir: Union[str, Path] = gen_specs['root_dir']
+        root_path = self.get_root_path(root_dir, use_sim_path=True)
 
+        # harnesses
+        harness_specs_list: Sequence[Mapping[str, Any]] = specs.get('harness_specs_list', [])
+        for _specs in harness_specs_list:
+            _extract: bool = _specs.get('extract', extract)
+            _gen_specs_file: str = _specs.get('gen_specs_file', '')
+            if _gen_specs_file:
+                _gen_specs: Mapping[str, Any] = read_yaml(_gen_specs_file)
+                _params_key = 'params'
+            else:
+                _gen_specs = _specs
+                _params_key = 'dut_params'
+            _static_info: str = _specs.get('static_info', '')
+            if _static_info:
+                _use_netlist: Optional[str] = _specs.get('use_netlist')
+                if _use_netlist is None and not _extract:
+                    print('Since harness is static, and a schematic or extracted netlist is not provided, '
+                          'the harness will be extracted from the Virtuoso library.')
+                specs_list.append(dict(
+                    static_info=_static_info,
+                    use_netlist=_use_netlist,
+                    extract=_use_netlist is None,
+                ))
+            else:
+                specs_list.append(dict(
+                    impl_cell=_gen_specs['impl_cell'],
+                    dut_cls=_gen_specs.get('dut_class') or _gen_specs['lay_class'],
+                    dut_params=_gen_specs[_params_key],
+                    extract=_extract,
+                    export_lay=gen_cell_dut & _extract,
+                    name_prefix=_gen_specs.get('name_prefix', ''),
+                    name_suffix=_gen_specs.get('name_suffix', ''),
+                ))
+
+        meas_rel_dir: str = specs.get('meas_rel_dir', '')
         meas_cls = cast(Type[MeasurementManager], import_class(meas_str))
-        lay_cls = cast(Type[TemplateBase], import_class(lay_str))
-        if isinstance(root_dir, str):
-            root_path = Path(root_dir)
-        else:
-            root_path = root_dir
         if meas_rel_dir:
             meas_path = root_path / meas_rel_dir
         else:
@@ -849,7 +997,8 @@ class BagProject:
         dsn_options = dict(
             extract=extract,
             force_extract=force_extract,
-            gen_sch=gen_sch,
+            gen_sch_dut=gen_cell_dut,
+            gen_sch_tb=gen_cell_tb,
             log_level=log_level,
         )
         log_file = str(meas_path / 'meas.log')
@@ -857,10 +1006,23 @@ class BagProject:
                                                 dsn_options=dsn_options, force_sim=force_sim,
                                                 precision=precision, log_level=log_level)
 
-        dut = sim_db.new_design(impl_cell, lay_cls, dut_params, extract=extract)
+        if specs_list:
+            coro = sim_db.async_batch_design(specs_list, rcx_params)
+            inst_list = batch_async_task([coro])[0]
+        else:
+            inst_list = []
         meas_params['fake'] = fake
         mm = sim_db.make_mm(meas_cls, meas_params)
-        result = sim_db.simulate_mm_obj(meas_name, meas_path / meas_name, dut, mm)
+        if no_dut:
+            dut = None
+            harnesses = inst_list
+        else:
+            dut = inst_list[0]
+            if len(inst_list) > 1:
+                harnesses = inst_list[1:]
+            else:
+                harnesses = []
+        result = sim_db.simulate_mm_obj(meas_name, meas_path / meas_name, dut, mm, harnesses)
         pprint.pprint(result.data)
 
     def measure_cell_old(self, specs: Dict[str, Any],
@@ -915,7 +1077,7 @@ class BagProject:
 
         gen_dut = (gen_dut or not load_from_file) and not use_netlist
 
-        root_path = Path(root_dir).resolve()
+        root_path = self.get_root_path(root_dir, use_sim_path=True)
 
         root_path.mkdir(parents=True, exist_ok=True)
         wrapper_lookup = {'': impl_cell}
@@ -942,6 +1104,39 @@ class BagProject:
                                         load_from_file=load_from_file, gen_sch=False)
 
         return result
+
+    def run_em_cell(self, specs: Mapping[str, Any], force_sim: bool = False,
+                    log_level: LogLevel = LogLevel.DEBUG) -> None:
+        gds_file: str = specs.get('gds_file', '')
+        impl_cell: str = specs['impl_cell']
+        root_dir: Union[str, Path] = specs['root_dir']
+        root_path = self.get_root_path(root_dir, use_sim_path=True)
+        if gds_file:
+            export_lay = False
+            gds_path = Path(gds_file)
+            impl_lib = ''
+        else:
+            export_lay = True
+            gds_path = root_path / f'{impl_cell}.gds'
+            impl_lib: str = specs['impl_lib']
+        params: Mapping[str, Any] = specs['params']
+        process_output: bool = specs.get('process_output', True)
+
+        # TODO: caching
+
+        # run EM simulation if it is defined in bag_config.yaml
+        if self._em_sim:
+            if export_lay:
+                self.export_layout(impl_lib, impl_cell, str(gds_path))
+
+            if force_sim:
+                self._em_sim.run_simulation(impl_cell, gds_path, params, root_path)
+            else:
+                print('Skipping EM simulation and using old results. Use "--force_sim" to force EM simulation.')
+            if process_output:
+                self._em_sim.process_output(impl_cell, params, root_path)
+        else:
+            raise NotImplementedError('EM simulation is not set up in bag_config.yaml.')
 
     def create_library(self, lib_name, lib_path=''):
         # type: (str, str) -> None
@@ -1100,7 +1295,7 @@ class BagProject:
         return self.impl_db.run_lvs(lib_name, cell_name, **kwargs)
 
     def run_rcx(self, lib_name: str, cell_name: str,
-                params: Optional[Mapping[str, Any]] = None) -> Tuple[str, str]:
+                params: Optional[Mapping[str, Any]] = None, **kwargs: Any) -> Tuple[str, str]:
         """run RC extraction on the given cell.
 
         Parameters
@@ -1111,6 +1306,8 @@ class BagProject:
             cell name.
         params : Optional[Dict[str, Any]]
             optional RCX parameter values.
+        **kwargs :
+            optional keyword arguments.  See DbAccess class for details.
 
         Returns
         -------
@@ -1119,7 +1316,7 @@ class BagProject:
         log_fname : str
             RCX log file name.
         """
-        return self.impl_db.run_rcx(lib_name, cell_name, params=params)
+        return self.impl_db.run_rcx(lib_name, cell_name, params=params, **kwargs)
 
     def generate_lef(self, impl_lib: str, impl_cell: str, verilog_path: Path,
                      lef_path: Path, run_path: Path, options: Dict[str, Any]) -> bool:
@@ -1128,6 +1325,27 @@ class BagProject:
         else:
             return self._lef.generate_lef(impl_lib, impl_cell, verilog_path, lef_path, run_path,
                                           **options)
+
+    def import_layout(self, in_file: str, lib_name: str, cell_name: str, **kwargs: Any) -> str:
+        """import layout.
+
+        Parameters
+        ----------
+        in_file : str
+            input file name.
+        lib_name : str
+            library name.
+        cell_name : str
+            cell name.
+        **kwargs : Any
+            optional keyword arguments.  See Checker class for details.
+
+        Returns
+        -------
+        log_fname : str
+            log file name.  Empty if task cancelled.
+        """
+        return self.impl_db.import_layout(in_file, lib_name, cell_name, **kwargs)
 
     def export_layout(self, lib_name: str, cell_name: str, out_file: str, **kwargs: Any) -> str:
         """export layout.

@@ -137,9 +137,11 @@ class SubProcessManager:
     cancel_timeout : float
         Number of seconds to wait for a process to terminate once SIGTERM or
         SIGKILL is issued.  Defaults to 10 seconds.
+    **kwargs: Any
+        Optional keyword arguments.
     """
 
-    def __init__(self, max_workers: int = 0, cancel_timeout: float = 10.0) -> None:
+    def __init__(self, max_workers: int = 0, cancel_timeout: float = 10.0, **kwargs: Any) -> None:
         if max_workers == 0:
             max_workers = multiprocessing.cpu_count()
 
@@ -180,7 +182,8 @@ class SubProcessManager:
                                    args: Union[str, Sequence[str]],
                                    log: str,
                                    env: Optional[Dict[str, str]] = None,
-                                   cwd: Optional[str] = None) -> Optional[int]:
+                                   cwd: Optional[str] = None,
+                                   **kwargs: Any) -> Optional[int]:
         """A coroutine which starts a subprocess.
 
         If this coroutine is cancelled, it will shut down the subprocess gracefully using
@@ -228,8 +231,7 @@ class SubProcessManager:
                     await self._kill_subprocess(proc)
                     raise err
 
-    async def async_new_subprocess_flow(self,
-                                        proc_info_list: Sequence[FlowInfo]) -> Any:
+    async def async_new_subprocess_flow(self, proc_info_list: Sequence[FlowInfo], **kwargs: Any) -> Any:
         """A coroutine which runs a series of subprocesses.
 
         If this coroutine is cancelled, it will shut down the current subprocess gracefully using

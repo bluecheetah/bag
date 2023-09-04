@@ -28,20 +28,39 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# -*- coding: utf-8 -*-
 
-from typing import Any
+import argparse
+
+from bag.core import BagProject
+from bag.util.misc import register_pdb_hook
+
+register_pdb_hook()
 
 
-from bag.design.module import {{ module_name }}
-from bag.design.database import ModuleDB
-from bag.util.immutable import Param
+def parse_options() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description='Extract cell from arguments.')
+    parser.add_argument('lib_name', help='Library name.')
+    parser.add_argument('cell_name', help='Cell name.')
+    parser.add_argument('extract_type', nargs='?', default=None, help='Extraction type.')
+    parser.add_argument('extract_corner', nargs='?', default=None, help='Extraction corner.')
+    args = parser.parse_args()
+    return args
 
 
-# noinspection PyPep8Naming
-class {{ lib_name }}__{{ cell_name }}({{ module_name }}):
-    """design module for {{ lib_name }}__{{ cell_name }}.
-    """
+def run_main(prj: BagProject, args: argparse.Namespace) -> None:
+    prj.extract_cell(lib_name=args.lib_name, cell_name=args.cell_name, extract_type=args.extract_type,
+                     extract_corner=args.extract_corner)
 
-    def __init__(self, database: ModuleDB, params: Param, **kwargs: Any) -> None:
-        {{ module_name }}.__init__(self, '', database, params, **kwargs)
+
+if __name__ == '__main__':
+    _args = parse_options()
+
+    local_dict = locals()
+    if 'bprj' not in local_dict:
+        print('creating BAG project')
+        _prj = BagProject()
+    else:
+        print('loading BAG project')
+        _prj = local_dict['bprj']
+
+    run_main(_prj, _args)

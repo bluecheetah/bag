@@ -83,6 +83,10 @@ class SweepLinear:
     def stop_inc(self) -> float:
         return self.stop if self.endpoint else self.start + (self.num - 1) * self.step
 
+    @property
+    def values(self) -> np.ndarray:
+        return np.linspace(self.start, self.stop, self.num, self.endpoint)
+
 
 @dataclass(eq=True, frozen=True)
 class SweepLog:
@@ -335,6 +339,7 @@ class AnalysisPSS:
     period: float
     fund: float
     autofund: bool
+    strobe: float
     options: ImmutableSortedDict[str, str]
     save_outputs: ImmutableList[str]
 
@@ -357,10 +362,22 @@ class AnalysisPAC(AnalysisAC):
 
 @dataclass(eq=True, frozen=True)
 class AnalysisPNoise(AnalysisNoise):
+    measurement: Optional[ImmutableList[JitterEvent]] = None
 
     @property
     def name(self) -> str:
         return 'pnoise'
+
+
+@dataclass(eq=True, frozen=True)
+class JitterEvent:
+    trig_p: str
+    trig_n: str
+    triggerthresh: float
+    triggernum: int
+    triggerdir: str
+    targ_p: str
+    targ_n: str
 
 
 AnalysisInfo = Union[AnalysisDC, AnalysisAC, AnalysisSP, AnalysisNoise, AnalysisTran,
@@ -390,7 +407,7 @@ def analysis_from_dict(table: Dict[str, Any]) -> AnalysisInfo:
     elif ana_type is AnalysisType.PSS:
         return AnalysisPSS(table.get('p_port', ''), table.get('n_port', ''),
                            table.get('period', 0.0), table.get('fund', 0.0),
-                           table.get('autofund', False),
+                           table.get('autofund', False), table.get('strobe', 0.0),
                            ImmutableSortedDict(table.get('options', {})),
                            ImmutableList(table.get('save_outputs', [])))
     elif ana_type is AnalysisType.PAC:
@@ -398,9 +415,12 @@ def analysis_from_dict(table: Dict[str, Any]) -> AnalysisInfo:
         return AnalysisPAC(base.param, base.sweep, base.options, base.save_outputs, base.freq)
     elif ana_type is AnalysisType.PNOISE:
         base = AnalysisAC.from_dict(table)
+        pnoise_meas = table.get('measurement', None)
+        if pnoise_meas:
+            pnoise_meas = ImmutableList([JitterEvent(**_dict) for _dict in pnoise_meas])
         return AnalysisPNoise(base.param, base.sweep, base.options, base.save_outputs, base.freq,
                               table.get('p_port', ''), table.get('n_port', ''),
-                              table.get('out_probe', ''), table.get('in_probe', ''))
+                              table.get('out_probe', ''), table.get('in_probe', ''), pnoise_meas)
     else:
         raise ValueError(f'Unknown analysis type: {ana_type}')
 
@@ -536,7 +556,7 @@ class AnalysisData:
             arr_list = [arr[sig] for arr in data_list]
             sizes = [x.shape for x in arr_list]
             max_size = np.max(list(zip(*sizes)), -1)
-            cur_ans = np.full((len(arr_list),) + tuple(max_size), np.nan)
+            cur_ans = np.full((len(arr_list),) + tuple(max_size), np.nan, dtype=arr_list[0].dtype)
             for idx, arr in enumerate(arr_list):
                 # noinspection PyTypeChecker
                 select = (idx,) + tuple(slice(0, s) for s in sizes[idx])
@@ -667,6 +687,12 @@ class AnalysisData:
                 swp_names = swp_names[:-1]
                 swp_shape, swp_vals = _check_is_md(num_env, [self._data[par] for par in swp_names],
                                                    rtol, atol, last_dset.shape[-1])
+
+                if len(swp_names) == 0:  # TODO: this is a hack to fix for 1 variable sweep
+                    swp_shape = list(swp_shape)
+                    swp_shape[-1] *= self._data[name].size
+                    swp_shape = tuple(swp_shape)
+                    
                 if swp_shape is not None:
                     for par, vals in zip(swp_names, swp_vals):
                         self._data[par] = vals
@@ -836,3 +862,82 @@ def _check_is_md(num_env: int, swp_vals: List[np.ndarray], rtol: float, atol: fl
     if last is not None:
         shape_list.append(last)
     return tuple(shape_list), new_vals
+
+
+def combine_ana_sim_envs(ana_dict: Dict[str, AnalysisData], sim_envs: List[str]) -> AnalysisData:
+    """Combine multiple single-corner analysis data to a single multi-corner analysis data.
+
+    Parameters
+    ----------
+    ana_dict : Dict[str, AnalysisData]
+        dictionary mapping corner to analysis data.
+    sim_envs: List[str]
+        list of corners.
+
+    Returns
+    -------
+    ana_data : AnalysisData
+        the combined analysis data.
+    """
+
+    cur_ana_sim_envs = list(ana_dict.keys())
+    assert sorted(cur_ana_sim_envs) == sorted(sim_envs), f"Expected corners {sim_envs}, got {cur_ana_sim_envs}"
+
+    num_sim_envs = len(sim_envs)
+    if num_sim_envs == 1:  # Single corner, nothing to combine
+        return ana_dict[sim_envs[0]]
+
+    ana_list = [ana_dict[sim_env] for sim_env in sim_envs]  # Reorder analyses by corner
+    merged_data = {}
+
+    ana0 = ana_list[0]
+    swp_par_list = ana0.sweep_params
+
+    # get all signals
+    max_size = None
+    for sig in ana0.signals:
+        arr_list = [arr[sig] for arr in ana_list]
+        sizes = [x.shape for x in arr_list]
+        max_size = np.max(list(zip(*sizes)), -1)
+        assert max_size[0] == 1
+        # noinspection PyTypeChecker
+        cur_ans = np.full((num_sim_envs,) + tuple(max_size[1:]), np.nan, dtype=arr_list[0].dtype)
+        for idx, arr in enumerate(arr_list):
+            select = (idx,) + tuple(slice(0, s) for s in sizes[idx][1:])
+            cur_ans[select] = arr
+        merged_data[sig] = cur_ans
+
+    if len(swp_par_list) > 1:
+        # get last sweep parameter
+        last_par = swp_par_list[-1]
+        last_xvec = ana0[last_par]
+        xvec_list = [ana[last_par] for ana in ana_list]
+        xshape_list = [x.shape for x in xvec_list]
+        for xvec in xvec_list[1:]:
+            # if the last sweep parameter values are different across corners,
+            # the last sweep parameter has to be a multi dimensional array
+            if not np.array_equal(xvec_list[0], xvec):
+                # noinspection PyTypeChecker
+                cur_ans = np.full((num_sim_envs,) + tuple(max_size[1:]), np.nan)
+                if len(xshape_list[0]) == len(cur_ans.shape):
+                    # if last sweep parameter has the same shape as the data,
+                    # then join these together along the first (corner) axis
+                    for idx, (_xvec, _xshape) in enumerate(zip(xvec_list, xshape_list)):
+                        select = (idx, ) + tuple(slice(0, s) for s in _xshape[1:])
+                        cur_ans[select] = _xvec
+                else:
+                    # if not the same shape as the data, assume corner is missing
+                    # and add it to the merged swept values
+                    for idx, (_xvec, _xshape) in enumerate(zip(xvec_list, xshape_list)):
+                        select = (idx, ...) + tuple(slice(0, s) for s in _xshape)
+                        cur_ans[select] = _xvec
+                last_xvec = cur_ans
+                break
+        merged_data[last_par] = last_xvec
+
+        # get all other sweep params
+        for sn in swp_par_list[:-1]:
+            if sn != 'corner':
+                merged_data[sn] = ana0[sn]
+
+    return AnalysisData(swp_par_list, merged_data, ana_list[0].is_md)

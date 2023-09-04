@@ -17,6 +17,8 @@ from typing import Mapping, Any
 
 import argparse
 
+from pybag.enum import LogLevel
+
 from bag.io import read_yaml
 from bag.core import BagProject
 from bag.util.misc import register_pdb_hook
@@ -35,8 +37,14 @@ def parse_options() -> argparse.Namespace:
                         help='Force RC extraction even if layout/schematic are unchanged')
     parser.add_argument('-s', '--force_sim', action='store_true', default=False,
                         help='Force simulation even if simulation netlist is unchanged')
-    parser.add_argument('-c', '--gen_sch', action='store_true', default=False,
-                        help='Generate testbench schematics for debugging.')
+    parser.add_argument('-c', '--gen_cell', action='store_true', default=False,
+                        help='Generate testbench schematics and DUT for debugging.')
+    parser.add_argument('-cd', '--gen_cell_dut', action='store_true', default=False,
+                        help='Generate only DUT for debugging.')
+    parser.add_argument('-ct', '--gen_cell_tb', action='store_true', default=False,
+                        help='Generate only testbench schematics for debugging.')
+    parser.add_argument('-q', '--quiet', action='store_true', default=False,
+                        help='Print only warning messages or above.')
     args = parser.parse_args()
     return args
 
@@ -44,8 +52,10 @@ def parse_options() -> argparse.Namespace:
 def run_main(prj: BagProject, args: argparse.Namespace) -> None:
     specs: Mapping[str, Any] = read_yaml(args.specs)
 
+    log_level = LogLevel.WARN if args.quiet else LogLevel.INFO
     DesignerBase.design_cell(prj, specs, extract=args.extract, force_sim=args.force_sim,
-                             force_extract=args.force_extract, gen_sch=args.gen_sch)
+                             force_extract=args.force_extract, gen_cell=args.gen_cell, gen_cell_dut=args.gen_cell_dut,
+                             gen_cell_tb=args.gen_cell_tb, log_level=log_level)
 
 
 if __name__ == '__main__':

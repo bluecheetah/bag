@@ -54,15 +54,16 @@ from typing import (
 import abc
 import time
 from collections import OrderedDict
-
-from pybag.enum import DesignOutput, SupplyWrapMode
+from itertools import chain
+from pybag.enum import DesignOutput, SupplyWrapMode, LogLevel
 from pybag.core import (
-    implement_yaml, implement_netlist, implement_gds, SUPPLY_SUFFIX, PySchCellView
+    implement_yaml, implement_netlist, implement_gds, SUPPLY_SUFFIX, PySchCellView, read_gds, make_tr_colors
 )
 
 from ..env import get_netlist_setup_file, get_gds_layer_map, get_gds_object_map
 from .search import get_new_name
 from .immutable import Param, to_immutable
+from .logging import LoggingBase
 
 if TYPE_CHECKING:
     from ..core import BagProject
@@ -84,7 +85,7 @@ def format_cell_name(cell_name: str, rename_dict: Dict[str, str], name_prefix: s
     return ans
 
 
-class DesignMaster(abc.ABC):
+class DesignMaster(LoggingBase, metaclass=abc.ABCMeta):
     """A design master instance.
 
     This class represents a design master in the design database.
@@ -95,6 +96,10 @@ class DesignMaster(abc.ABC):
         the master database.
     params : Param
         the parameters dictionary.
+    log_file: str
+        the log file path.
+    log_level : LogLevel
+        the logging level.
     key: Any
         If not None, the unique ID for this master instance.
     copy_state : Optional[Dict[str, Any]]
@@ -106,8 +111,10 @@ class DesignMaster(abc.ABC):
         the parameters dictionary.
     """
 
-    def __init__(self, master_db: MasterDB, params: Param, *,
+    def __init__(self, master_db: MasterDB, params: Param, log_file: str,
+                 log_level: LogLevel = LogLevel.DEBUG, *,
                  key: Any = None, copy_state: Optional[Dict[str, Any]] = None) -> None:
+        LoggingBase.__init__(self, self.__class__.__name__, log_file, log_level=log_level)
         self._master_db = master_db
         self._cell_name = ''
 
@@ -117,6 +124,8 @@ class DesignMaster(abc.ABC):
             self._params = copy_state['params']
             self._cell_name = copy_state['cell_name']
             self._key = copy_state['key']
+            self._log_file = copy_state['log_file']
+            self._log_level = copy_state['log_level']
         else:
             # use ordered dictionary so we have deterministic dependency order
             self._children = OrderedDict()
@@ -130,6 +139,10 @@ class DesignMaster(abc.ABC):
             self._cell_name = get_new_name(self.get_master_basename(),
                                            self.master_db.used_cell_names)
 
+            # Set logging base parameters
+            self._log_file = log_file
+            self._log_level = log_level
+
     @classmethod
     def get_qualified_name(cls) -> str:
         """Returns the qualified name of this class."""
@@ -140,8 +153,8 @@ class DesignMaster(abc.ABC):
             return my_module + '.' + cls.__name__
 
     @classmethod
-    def populate_params(cls, table: Dict[str, Any], params_info: Dict[str, str],
-                        default_params: Dict[str, Any]) -> Param:
+    def populate_params(cls, table: Mapping[str, Any], params_info: Mapping[str, str],
+                        default_params: Mapping[str, Any]) -> Param:
         """Fill params dictionary with values from table and default_params"""
         hidden_params = cls.get_hidden_params()
 
@@ -179,7 +192,7 @@ class DesignMaster(abc.ABC):
         return cls.get_qualified_name(), params
 
     @classmethod
-    def process_params(cls, params: Dict[str, Any]) -> Tuple[Param, Any]:
+    def process_params(cls, params: Mapping[str, Any]) -> Tuple[Param, Any]:
         """Process the given parameters dictionary.
 
         This method computes the final parameters dictionary from the user given one by
@@ -188,7 +201,7 @@ class DesignMaster(abc.ABC):
 
         Parameters
         ----------
-        params : Dict[str, Any]
+        params : Mapping[str, Any]
             the parameter dictionary specified by the user.
 
         Returns
@@ -212,12 +225,15 @@ class DesignMaster(abc.ABC):
             'params': new_params,
             'cell_name': self._cell_name,
             'key': self._key,
+            'log_file': self._log_file,
+            'log_level': self._log_level,
         }
 
     def get_copy_with(self: MasterType, new_params: Param) -> MasterType:
         """Returns a copy of this master instance."""
         copy_state = self.get_copy_state_with(new_params)
-        return self.__class__(self._master_db, None, copy_state=copy_state)
+        return self.__class__(self._master_db, None, log_file=copy_state['log_file'],
+                              log_level=copy_state['log_level'], copy_state=copy_state)
 
     @classmethod
     def to_immutable_id(cls, val: Any) -> Any:
@@ -233,18 +249,18 @@ class DesignMaster(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def get_params_info(cls) -> Dict[str, str]:
+    def get_params_info(cls) -> Mapping[str, str]:
         """Returns a dictionary from parameter names to descriptions.
 
         Returns
         -------
-        param_info : Dict[str, str]
+        param_info : Mapping[str, str]
             dictionary from parameter names to descriptions.
         """
         return {}
 
     @classmethod
-    def get_default_param_values(cls) -> Dict[str, Any]:
+    def get_default_param_values(cls) -> Mapping[str, Any]:
         """Returns a dictionary containing default parameter values.
 
         Override this method to define default parameter values.  As good practice,
@@ -254,7 +270,7 @@ class DesignMaster(abc.ABC):
 
         Returns
         -------
-        default_params : Dict[str, Any]
+        default_params : Mapping[str, Any]
             dictionary of default parameter values.
         """
         return {}
@@ -363,7 +379,7 @@ class DesignMaster(abc.ABC):
         return iter(self._children)
 
 
-class MasterDB(abc.ABC):
+class MasterDB(LoggingBase, metaclass=abc.ABCMeta):
     """A database of existing design masters.
 
     This class keeps track of existing design masters and maintain design dependency hierarchy.
@@ -372,16 +388,21 @@ class MasterDB(abc.ABC):
     ----------
     lib_name : str
         the library to put all generated templates in.
+    log_file: str
+        the log file path.
     prj : Optional[BagProject]
         the BagProject instance.
     name_prefix : str
         generated master name prefix.
     name_suffix : str
         generated master name suffix.
+    log_level : LogLevel
+        the logging level.
     """
 
-    def __init__(self, lib_name: str, prj: Optional[BagProject] = None, name_prefix: str = '',
-                 name_suffix: str = '') -> None:
+    def __init__(self, lib_name: str, log_file: str, prj: Optional[BagProject] = None,
+                 name_prefix: str = '', name_suffix: str = '', log_level: LogLevel = LogLevel.DEBUG) -> None:
+        LoggingBase.__init__(self, self.__class__.__name__, log_file, log_level=log_level)
 
         self._prj = prj
         self._lib_name = lib_name
@@ -489,16 +510,17 @@ class MasterDB(abc.ABC):
             rmin = kwargs.get('rmin', 2000)
             precision = kwargs.get('precision', 6)
             cv_info_list = kwargs.get('cv_info_list', [])
+            va_cvinfo_list = kwargs.get('va_cvinfo_list', [])
             cv_info_out = kwargs.get('cv_info_out', None)
-            cv_netlist = kwargs.get('cv_netlist', '')
+            cv_netlist_list = kwargs.get('cv_netlist_list', [])
 
             prim_fname = get_netlist_setup_file()
-            if bool(cv_info_list) != bool(cv_netlist):
-                raise ValueError('cv_netlist and cv_info_list must be given together.')
+            if bool(cv_info_list) != bool(cv_netlist_list):
+                raise ValueError('cv_netlist_list and cv_info_list must be given together.')
 
             implement_netlist(fname, content_list, top_list, output, flat, shell, top_subckt,
                               square_bracket, rmin, precision, supply_wrap_mode, prim_fname,
-                              cv_info_list, cv_netlist, cv_info_out)
+                              cv_info_list, cv_netlist_list, cv_info_out, va_cvinfo_list)
         else:
             raise ValueError('Unknown design output type: {}'.format(output.name))
         end = time.time()
@@ -544,7 +566,7 @@ class MasterDB(abc.ABC):
 
         if debug:
             print('finalizing master')
-        master = gen_cls(self, master_params, key=key, **kwargs)
+        master = gen_cls(self, master_params, log_file=self.log_file, key=key, log_level=self.log_level, **kwargs)
         start = time.time()
         master.finalize()
         end = time.time()
@@ -599,15 +621,16 @@ class MasterDB(abc.ABC):
         """
         supply_wrap_mode: SupplyWrapMode = kwargs.pop('supply_wrap_mode', SupplyWrapMode.NONE)
         cv_info_list: List[PySchCellView] = kwargs.get('cv_info_list', [])
+        va_cvinfo_list: List[PySchCellView] = kwargs.get('va_cvinfo_list', [])
         shell: bool = kwargs.get('shell', False)
         exact_cell_names: Set[str] = kwargs.get('exact_cell_names', set())
         prefix: str = kwargs.get('name_prefix', self._name_prefix)
         suffix: str = kwargs.get('name_suffix', self._name_suffix)
         empty_dict = {}
 
-        if cv_info_list:
+        if cv_info_list or va_cvinfo_list:
             # need to avoid name collision
-            cv_netlist_names = set((cv.cell_name for cv in cv_info_list))
+            cv_netlist_names = set((cv.cell_name for cv in chain(cv_info_list, va_cvinfo_list)))
 
             # check that exact cell names won't collide with existing names in netlist
             for name in exact_cell_names:
@@ -691,9 +714,24 @@ class MasterDB(abc.ABC):
             self._batch_output_helper(info_dict, master, rename, reverse_rename, netlist_used_names)
         end = time.time()
 
-        content_list = [master.get_content(output, rename, prefix, suffix, shell,
-                                           exact_cell_names, supply_wrap_mode)
-                        for master in info_dict.values()]
+        content_list = []
+        for master in info_dict.values():
+            if output is DesignOutput.GDS:
+                lay_map = get_gds_layer_map()
+                obj_map = get_gds_object_map()
+                tr_colors = make_tr_colors(self.tech_info)
+                if master.blackbox_gds:
+                    for _path in master.blackbox_gds:
+                        if _path.is_file():
+                            _gds_in = read_gds(str(_path), lay_map, obj_map, self._prj.grid, tr_colors)
+                        else:
+                            raise ValueError(f'Non existent gds file: {str(_path)}')
+                        for _item in _gds_in:
+                            _tuple = (_item.cell_name, _item)
+                            if _tuple not in content_list:
+                                content_list.append(_tuple)
+            content_list.append(master.get_content(output, rename, prefix, suffix, shell,
+                                                   exact_cell_names, supply_wrap_mode))
 
         if debug:
             print(f'master content retrieval took {end - start:.4g} seconds')

@@ -51,13 +51,17 @@ from typing import (
     Sequence, Set, cast
 )
 from bag.typing import PointType
+from bag.util.search import BinaryIterator
+from bag.env import create_routing_grid_from_file
 
 import abc
 from itertools import product
+import os
+from pathlib import Path
 
 from pybag.enum import (
     PathStyle, BlockageType, BoundaryType, DesignOutput, Orient2D, SupplyWrapMode,
-    Orientation, Direction, MinLenMode, RoundMode, PinMode, Direction2D
+    Orientation, Direction, MinLenMode, RoundMode, PinMode, Direction2D, LogLevel
 )
 from pybag.core import (
     BBox, BBoxArray, PyLayCellView, Transform, PyLayInstRef, PyPath, PyBlockage, PyBoundary,
@@ -73,7 +77,7 @@ from ..design.module import Module
 
 from .core import PyLayInstance
 from .tech import TechInfo
-from .routing.base import Port, TrackID, WireArray
+from .routing.base import Port, TrackID, WireArray, TrackManager
 from .routing.grid import RoutingGrid
 from .data import MOMCapInfo, TemplateEdgeInfo
 
@@ -98,17 +102,22 @@ class TemplateDB(MasterDB):
         the default RoutingGrid object.
     lib_name : str
         the cadence library to put all generated templates in.
+    log_file: str
+        the log file path.
     prj : Optional[BagProject]
         the BagProject instance.
     name_prefix : str
         generated layout name prefix.
     name_suffix : str
         generated layout name suffix.
+    log_level : LogLevel
+        the logging level.
     """
 
-    def __init__(self, routing_grid: RoutingGrid, lib_name: str, prj: Optional[BagProject] = None,
-                 name_prefix: str = '', name_suffix: str = '') -> None:
-        MasterDB.__init__(self, lib_name, prj=prj, name_prefix=name_prefix, name_suffix=name_suffix)
+    def __init__(self, routing_grid: RoutingGrid, lib_name: str, log_file: str, prj: Optional[BagProject] = None,
+                 name_prefix: str = '', name_suffix: str = '', log_level: LogLevel = LogLevel.DEBUG) -> None:
+        MasterDB.__init__(self, lib_name, log_file, prj=prj, name_prefix=name_prefix, name_suffix=name_suffix,
+                          log_level=log_level)
 
         self._grid = routing_grid
         self._tr_colors = make_tr_colors(self._grid.tech_info)
@@ -181,6 +190,10 @@ class TemplateBase(DesignMaster):
         the template database.
     params : Param
         the parameter values.
+    log_file: str
+        the log file path.
+    log_level : LogLevel
+        the logging level.
     **kwargs : Any
         dictionary of the following optional parameters:
 
@@ -188,10 +201,11 @@ class TemplateBase(DesignMaster):
             the routing grid to use for this template.
     """
 
-    def __init__(self, temp_db: TemplateDB, params: Param, **kwargs: Any) -> None:
+    def __init__(self, temp_db: TemplateDB, params: Param, log_file: str,
+                 log_level: LogLevel = LogLevel.DEBUG, **kwargs: Any) -> None:
 
         # add hidden parameters
-        DesignMaster.__init__(self, temp_db, params, **kwargs)
+        DesignMaster.__init__(self, temp_db, params, log_file, log_level, **kwargs)
 
         # private attributes
         self._size: Optional[SizeType] = None
@@ -203,17 +217,21 @@ class TemplateBase(DesignMaster):
         self._cell_boundary_added: bool = False
         self._instances: Dict[str, PyLayInstance] = {}
         self._use_color: bool = False
+        self._blackbox_gds: List[Path] = []
 
         # public attributes
         self.prim_top_layer: Optional[int] = None
         self.prim_bound_box: Optional[BBox] = None
 
         # get private attributes from parameters
-        tmp_grid: RoutingGrid = self.params['grid']
+        tmp_grid: Union[RoutingGrid, str] = self.params['grid']
         if tmp_grid is None:
             self._grid: RoutingGrid = temp_db.grid
         else:
-            self._grid: RoutingGrid = tmp_grid
+            if isinstance(tmp_grid, RoutingGrid):
+                self._grid: RoutingGrid = tmp_grid
+            else:
+                self._grid: RoutingGrid = create_routing_grid_from_file(tmp_grid)
 
         tmp_colors: TrackColoring = self.params['tr_colors']
         if tmp_colors is None:
@@ -226,6 +244,10 @@ class TemplateBase(DesignMaster):
 
         # create Cython wrapper object
         self._layout: PyLayCellView = PyLayCellView(self._grid, self._tr_colors, self.cell_name)
+
+    @property
+    def blackbox_gds(self) -> List[Path]:
+        return self._blackbox_gds
 
     @classmethod
     def get_hidden_params(cls) -> Dict[str, Any]:
@@ -536,8 +558,8 @@ class TemplateBase(DesignMaster):
             raise ValueError('lower-left corner of array box must be in first quadrant.')
 
         # noinspection PyAttributeOutsideInit
-        self.size = grid.get_size_tuple(top_layer_id, 2 * dx + self.array_box.width_unit,
-                                        2 * dy + self.array_box.height_unit)
+        self.size = grid.get_size_tuple(top_layer_id, 2 * dx + self.array_box.w,
+                                        2 * dy + self.array_box.h)
 
     def get_pin_name(self, name: str) -> str:
         """Get the actual name of the given pin from the renaming dictionary.
@@ -616,7 +638,7 @@ class TemplateBase(DesignMaster):
             the new template instance.
         """
         if grid is None:
-            grid = self.grid
+            grid = params.get('grid', self.grid)
         show_pins = params.get('show_pins', show_pins)
         if isinstance(params, ImmutableSortedDict):
             params = params.copy(append=dict(grid=grid, show_pins=show_pins))
@@ -737,6 +759,9 @@ class TemplateBase(DesignMaster):
         if params:
             raise ValueError("layout pcells not supported yet; see developer")
 
+        blackbox_gds: Path = Path(os.environ['BAG_TECH_CONFIG_DIR']) / 'blackbox_gds' / lib_name / f'{cell_name}.gds'
+        if blackbox_gds not in self._blackbox_gds:
+            self._blackbox_gds.append(blackbox_gds)
         return self._layout.add_prim_instance(lib_name, cell_name, view_name, inst_name, xform,
                                               nx, ny, spx, spy, commit)
 
@@ -785,6 +810,9 @@ class TemplateBase(DesignMaster):
     def add_bbox_collection(self, lay_purp: Tuple[str, str], bcol: BBoxCollection) -> None:
         self._layout.add_rect_list(lay_purp[0], lay_purp[1], bcol)
 
+    def has_res_metal(self) -> bool:
+        return self._grid.tech_info.has_res_metal()
+
     def add_res_metal(self, layer_id: int, bbox: BBox) -> None:
         """Add a new metal resistor.
 
@@ -795,8 +823,11 @@ class TemplateBase(DesignMaster):
         bbox : BBox
             the resistor bounding box.
         """
-        for lay, purp in self._grid.tech_info.get_res_metal_layers(layer_id):
-            self._layout.add_rect(lay, purp, bbox, True)
+        if self.has_res_metal():
+            for lay, purp in self._grid.tech_info.get_res_metal_layers(layer_id):
+                self._layout.add_rect(lay, purp, bbox, True)
+        else:
+            raise ValueError('res_metal does not exist in the process.')
 
     def add_path(self, lay_purp: Tuple[str, str], width: int, points: List[PointType],
                  start_style: PathStyle, *, join_style: PathStyle = PathStyle.round,
@@ -1017,7 +1048,7 @@ class TemplateBase(DesignMaster):
             cur_geo_list.extend(geo_list)
 
     def add_pin_primitive(self, net_name: str, layer: str, bbox: BBox, *,
-                          label: str = '', show: bool = True, hide: bool = False,
+                          label: str = '', show: Optional[bool] = None, hide: bool = False,
                           connect: bool = False):
         """Add a primitive pin to the layout.
 
@@ -1034,8 +1065,8 @@ class TemplateBase(DesignMaster):
             this argument is used if you need the label to be different than net name
             for LVS purposes.  For example, unconnected pins usually need a colon after
             the name to indicate that LVS should short those pins together.
-        show : bool
-            True to draw the pin in layout.
+        show : Optional[bool]
+            True to draw the pin in layout. If None, use self.show_pins
         hide : bool
             True to add a hidden pin.
         connect : bool
@@ -1272,7 +1303,7 @@ class TemplateBase(DesignMaster):
                           *, num_rows: int = 1, num_cols: int = 1, sp_rows: int = 0,
                           sp_cols: int = 0, enc1: Tuple[int, int, int, int] = (0, 0, 0, 0),
                           enc2: Tuple[int, int, int, int] = (0, 0, 0, 0), nx: int = 1, ny: int = 1,
-                          spx: int = 0, spy: int = 0) -> None:
+                          spx: int = 0, spy: int = 0, priority: int = 1) -> None:
         """Adds via(s) by specifying all parameters.
 
         Parameters
@@ -1307,11 +1338,13 @@ class TemplateBase(DesignMaster):
             column pitch.
         spy : int
             row pitch.
+        priority : int
+            via priority, defaults to 1
         """
         l1, r1, t1, b1 = enc1
         l2, r2, t2, b2 = enc2
         param = ViaParam(num_cols, num_rows, cut_width, cut_height, sp_cols, sp_rows,
-                         l1, r1, t1, b1, l2, r2, t2, b2)
+                         l1, r1, t1, b1, l2, r2, t2, b2, priority)
         self._layout.add_via_arr(xform, via_type, param, True, nx, ny, spx, spy)
 
     def add_via_on_grid(self, tid1: TrackID, tid2: TrackID, *, extend: bool = True
@@ -1809,8 +1842,8 @@ class TemplateBase(DesignMaster):
 
     def get_available_tracks(self, layer_id: int, tid_lo: TrackType, tid_hi: TrackType,
                              lower: int, upper: int, width: int = 1, sep: HalfInt = HalfInt(1),
-                             include_last: bool = False, sep_margin: Optional[HalfInt] = None
-                             ) -> List[HalfInt]:
+                             include_last: bool = False, sep_margin: Optional[HalfInt] = None,
+                             uniform_grid: bool = False) -> List[HalfInt]:
         """Returns a list of available tracks between the given bounds.
 
         Parameters
@@ -1833,6 +1866,8 @@ class TemplateBase(DesignMaster):
             True to make "upper" inclusive.
         sep_margin : Optional[HalfInt]
             the margin between available tracks and surrounding wires, in number of tracks.
+        uniform_grid : bool
+            True to get available tracks on a uniform grid; False to get densely packed available tracks
 
         Returns
         -------
@@ -1867,7 +1902,7 @@ class TemplateBase(DesignMaster):
                 ans.append(HalfInt(cur_htr))
                 cur_htr += htr_sep
             else:
-                cur_htr += 1
+                cur_htr += htr_sep if uniform_grid else 1
 
         return ans
 
@@ -2353,6 +2388,7 @@ class TemplateBase(DesignMaster):
     def connect_to_track_wires(self, wire_arr_list: Union[WireArray, List[WireArray]],
                                track_wires: Union[WireArray, List[WireArray]], *,
                                min_len_mode: Optional[MinLenMode] = None,
+                               ret_wire_list: Optional[List[WireArray]] = None,
                                debug: bool = False) -> Union[Optional[WireArray],
                                                              List[Optional[WireArray]]]:
         """Connect all given WireArrays to the given WireArrays on adjacent layer.
@@ -2365,6 +2401,8 @@ class TemplateBase(DesignMaster):
             list of tracks as WireArrays.
         min_len_mode : MinLenMode
             the minimum length extension mode.
+        ret_wire_list : Optional[List[WireArray]]
+            If not none, extended wires that are created will be appended to this list.
         debug : bool
             True to print debug messages.
 
@@ -2376,7 +2414,7 @@ class TemplateBase(DesignMaster):
         ans = []  # type: List[Optional[WireArray]]
         for warr in WireArray.wire_grp_iter(track_wires):
             tr = self.connect_to_tracks(wire_arr_list, warr.track_id, track_lower=warr.lower,
-                                        track_upper=warr.upper, min_len_mode=min_len_mode,
+                                        track_upper=warr.upper, min_len_mode=min_len_mode, ret_wire_list=ret_wire_list,
                                         debug=debug)
             ans.append(tr)
 
@@ -2627,6 +2665,136 @@ class TemplateBase(DesignMaster):
             self.add_instance(master, inst_name=f'XFILL{cnt}', xform=Transform(box.xl, box.yl))
             cnt += 1
 
+    def do_power_fill(self, layer_id: int, tr_manager: TrackManager,
+                      vdd_warrs: Optional[Union[WireArray, List[WireArray]]] = None,
+                      vss_warrs: Optional[Union[WireArray, List[WireArray]]] = None, bound_box: Optional[BBox] = None,
+                      x_margin: int = 0, y_margin: int = 0, sup_type: str = 'both', flip: bool = False,
+                      uniform_grid: bool = False) -> Tuple[List[WireArray], List[WireArray]]:
+        """Draw power fill on the given layer. Wrapper around do_multi_power_fill method
+        that only returns the VDD and VSS wires.
+
+        Parameters
+        ----------
+        layer_id : int
+            the layer ID on which to draw power fill.
+        tr_manager : TrackManager
+            the TrackManager object.
+        sup_list : List[Union[WireArray, List[WireArray]]]
+            a list of supply wires to draw power fill for.
+        bound_box : Optional[BBox]
+            bound box over which to draw the power fill
+        x_margin : int
+            keepout margin on the x-axis. Fill is centered within margin.
+        y_margin : int
+            keepout margin on the y-axis. Fill is centered within margin.
+        uniform_grid : bool
+            draw power fill on a common grid instead of dense packing.
+        flip : bool
+            true to reverse order of power fill. Default (False) is {VDD, VSS}.
+
+        Returns
+        -------
+        Tuple[List[WireArray], List[WireArray]]
+            Tuple of VDD and VSS wires. If only one supply was specified, the other will be an empty list.
+        """
+        # Value checks
+        if sup_type.lower() not in ['vdd', 'vss', 'both']:
+            raise ValueError('sup_type has to be "VDD" or "VSS" or "both"(default)')
+        if not vdd_warrs and not vss_warrs:
+            raise ValueError('At least one of vdd_warrs or vss_warrs must be given.')
+
+        # Build supply lists based on specficiation
+        if sup_type.lower() == 'both' and vdd_warrs and vss_warrs:
+            top_lists = [vdd_warrs, vss_warrs]
+        elif sup_type.lower() == 'vss' and vss_warrs:
+            top_lists = [vss_warrs]
+        elif sup_type.lower() == 'vdd' and vdd_warrs:
+            top_lists = [vdd_warrs]
+        else:
+            raise RuntimeError('Provided supply type and supply wires do not match.')
+
+        # Run the actual power fill using the multi_power_fill function
+        ret_warrs = self.do_multi_power_fill(layer_id, tr_manager, top_lists, bound_box,
+                                             x_margin, y_margin, flip, uniform_grid)
+
+        # Reorganize return values
+        if sup_type.lower() == 'both':
+            top_vdd, top_vss = (ret_warrs[0], ret_warrs[1]) if not flip else (ret_warrs[1], ret_warrs[0])
+        elif sup_type.lower() == 'vss':
+            top_vdd = []
+            top_vss = ret_warrs[0]
+        elif sup_type.lower() == 'vdd':
+            top_vss = []
+            top_vdd = ret_warrs[0]
+
+        return top_vdd, top_vss
+
+    def do_multi_power_fill(self, layer_id: int, tr_manager: TrackManager, sup_list: List[Union[WireArray, List[WireArray]]],
+                            bound_box: Optional[BBox] = None, x_margin: int = 0, y_margin: int = 0, flip: bool = False,
+                            uniform_grid: bool = False) -> List[List[WireArray]]:
+        """Draw power fill on the given layer. Accepts as many different supply nets as provided.
+
+        Parameters
+        ----------
+        layer_id : int
+            the layer ID on which to draw power fill.
+        tr_manager : TrackManager
+            the TrackManager object.
+        sup_list : List[Union[WireArray, List[WireArray]]]
+            a list of supply wires to draw power fill for.
+        bound_box : Optional[BBox]
+            bound box over which to draw the power fill
+        x_margin : int
+            keepout margin on the x-axis. Fill is centered within margin.
+        y_margin : int
+            keepout margin on the y-axis. Fill is centered within margin.
+        uniform_grid : bool
+            draw power fill on a common grid instead of dense packing.
+        flip : bool
+            true to reverse order of power fill. Default is False.
+
+        Returns
+        -------
+        List[List[WireArray]]
+            List of the wire arrays for each supply in sup_list, given in the
+            same order as sup_list.
+        """
+        if bound_box is None:
+            if self.bound_box is None:
+                raise ValueError("bound_box is not set")
+            bound_box = self.bound_box
+        bound_box = bound_box.expand(dx=-x_margin, dy=-y_margin)
+        is_horizontal = (self.grid.get_direction(layer_id) == 0)
+        num_sups = len(sup_list)
+        if is_horizontal:
+            cl, cu = bound_box.yl, bound_box.yh
+            lower, upper = bound_box.xl, bound_box.xh
+        else:
+            cl, cu = bound_box.xl, bound_box.xh
+            lower, upper = bound_box.yl, bound_box.yh
+        fill_width = tr_manager.get_width(layer_id, 'sup')
+        fill_space = tr_manager.get_sep(layer_id, ('sup', 'sup'))
+        sep_margin = tr_manager.get_sep(layer_id, ('sup', ''))
+        tr_bot = self.grid.coord_to_track(layer_id, cl, mode=RoundMode.GREATER_EQ)
+        tr_top = self.grid.coord_to_track(layer_id, cu, mode=RoundMode.LESS_EQ)
+        trs = self.get_available_tracks(layer_id, tid_lo=tr_bot, tid_hi=tr_top, lower=lower, upper=upper,
+                                        width=fill_width, sep=fill_space, sep_margin=sep_margin,
+                                        uniform_grid=uniform_grid)
+        all_warrs = [[] for _ in range(num_sups)]
+        htr_sep = HalfInt.convert(fill_space).dbl_value
+        if len(trs) < num_sups:
+            raise ValueError('Not enough available tracks to fill for all provided supplies')
+        for ncur, tr_idx in enumerate(trs):
+            warr = self.add_wires(layer_id, tr_idx, lower, upper, width=fill_width)
+            _ncur = HalfInt.convert(tr_idx).dbl_value // htr_sep if uniform_grid else ncur
+            if not flip:
+                all_warrs[_ncur % num_sups].append(warr)
+            else:
+                all_warrs[(num_sups - 1) - (_ncur % num_sups)].append(warr)
+        for top_warr, bot_warr in zip(sup_list, all_warrs):
+            self.draw_vias_on_intersections(top_warr, bot_warr)
+        return all_warrs
+
     def get_lef_options(self, options: Dict[str, Any], config: Mapping[str, Any]) -> None:
         """Populate the LEF options dictionary.
 
@@ -2655,6 +2823,176 @@ class TemplateBase(DesignMaster):
         options['cover_layers'] = [lay for lay_id in sorted(cover_layers)
                                    for lay, _ in tech_info.get_lay_purp_list(lay_id)]
         options['cell_type'] = config.get('cell_type', 'block')
+
+    def find_track_width(self, layer_id: int, width: int) -> int:
+        """Find the track width corresponding to the physical width
+
+        Parameters
+        ----------
+        layer_id: int
+            The metal layer ID
+        width: int
+            Physical width of the wire, in resolution units
+
+        Returns
+        -------
+        tr_width: int
+        """
+        bin_iter = BinaryIterator(low=1)
+        while bin_iter.has_next():
+            cur = bin_iter.get_next()
+            cur_width = self.grid.get_wire_total_width(layer_id, cur)
+            if cur_width == width:
+                return cur
+            if cur_width < width:
+                bin_iter.up()
+            else:  # cur_width > width
+                bin_iter.down()
+        raise ValueError(f'Cannot find track width for width={width} on layer={layer_id}.')
+
+    def connect_via_stack(self, tr_manager: TrackManager, warr: WireArray, top_layer: int, w_type: str = 'sig',
+                          alignment_p: int = 0, alignment_o: int = 0,
+                          mlm_dict: Optional[Mapping[int, MinLenMode]] = None,
+                          ret_warr_dict: Optional[Mapping[int, WireArray]] = None,
+                          coord_list_p_override: Optional[Sequence[int]] = None,
+                          coord_list_o_override: Optional[Sequence[int]] = None, alternate_o: bool = False
+                          ) -> WireArray:
+        """Helper method to draw via stack and connections upto top layer, assuming connections can be on grid.
+        Should work regardless of direction of top layer and bot layer.
+
+        This method supports equally spaced WireArrays only. Needs modification for non uniformly spaced WireArrays.
+
+        Parameters
+        ----------
+        tr_manager: TrackManager
+            the track manager for this layout generator
+        warr: WireArray
+            The bot_layer wire array that has to via up
+        top_layer: int
+            The top_layer upto which stacked via has to go
+        w_type: str
+            The wire type, for querying widths from track manager
+        alignment_p: int
+            alignment for wire arrays which are parallel to bot_layer warr
+            If alignment == -1, will "left adjust" the wires (left is the lower index direction).
+            If alignment == 0, will center the wires in the middle.
+            If alignment == 1, will "right adjust" the wires.
+        alignment_o: int
+            alignment for wire arrays which are orthogonal to bot_layer warr
+        mlm_dict: Optional[Mapping[int, MinLenMode]]
+            Dictionary of MinLenMode for every metal layer. Uses MinLenMode.MIDDLE by default
+        ret_warr_dict: Optional[Mapping[int, WireArray]]
+            If provided, this dictionary will contain all the WireArrays created during via stacking
+        coord_list_p_override: Optional[Sequence[int]]
+            List of co-ordinates for WireArrays parallel to bot_layer wire, assumed to be equally spaced
+        coord_list_o_override: Optional[Sequence[int]]
+            List of co-ordinates for WireArrays orthogonal to bot_layer wire, assumed to be equally spaced
+        alternate_o: bool
+            If coord_o_list is computed (i.e. coord_o_list_override is not used) then every other track is skipped
+            for via spacing. Using alternate_o, we can choose which set of tracks is used and which is skipped.
+            This is useful to avoid line end spacing issues when two adjacent wires require via stacks.
+
+        Returns
+        -------
+        top_warr: WireArray
+            The top_layer warr after via stacking all the way up
+        """
+        if ret_warr_dict is None:
+            ret_warr_dict = {}
+        if mlm_dict is None:
+            mlm_dict = {}
+        bot_layer = warr.layer_id
+        # assert bot_layer + 2 <= top_layer, f'top_layer={top_layer} must be at least 2 higher than ' \
+        #                                    f'bot_layer={bot_layer}  to have via stack'
+
+        # Make sure widths are enough so that we can via up to top_layer
+        top_layer_w = tr_manager.get_width(top_layer, w_type)
+        w_dict = {top_layer: top_layer_w}
+        for _layer in range(top_layer - 1, bot_layer - 1, -1):
+            top_layer_w = w_dict[_layer] = self.grid.get_min_track_width(_layer, top_ntr=top_layer_w)
+        assert warr.track_id.width >= w_dict[bot_layer], f'It is not possible to via up from given WireArray to the ' \
+                                                         f'top_layer={top_layer} with width={top_layer_w} specified ' \
+                                                         f'by the TrackManager.'
+
+        # Find number of tracks to be used for layers with direction orthogonal to bot_layer, based on topmost
+        # layer in that direction, called as top_layer_o ("_o" means orthogonal to bot_layer)
+        bot_dir = self.grid.get_direction(bot_layer)
+        top_dir = self.grid.get_direction(top_layer)
+        top_layer_o = top_layer - 1 if bot_dir == top_dir else top_layer
+
+        if coord_list_o_override is None:
+            tidx_l = self.grid.coord_to_track(top_layer_o, warr.lower, RoundMode.GREATER_EQ)
+            tidx_r = self.grid.coord_to_track(top_layer_o, warr.upper, RoundMode.LESS_EQ)
+            # Divide by 2 for via separation
+            num_wires_o = tr_manager.get_num_wires_between(top_layer_o, w_type, tidx_l, w_type, tidx_r, w_type) + 2
+            num_wires_o = max(-(- num_wires_o // 2), 1)
+            if num_wires_o == 1:
+                tidx_list_o = [self.grid.coord_to_track(top_layer_o, warr.middle, RoundMode.NEAREST)]
+            else:
+                tidx_list_o = tr_manager.spread_wires(top_layer_o, [w_type] * (2 * num_wires_o - 1), tidx_l, tidx_r,
+                                                      (w_type, w_type), alignment=alignment_o)
+                tidx_list_o = tidx_list_o[1::2] if alternate_o else tidx_list_o[0::2]
+                num_wires_o = len(tidx_list_o)
+            # need to compute coord_list for conversion to tidx in layers which are same direction as top_layer_o
+            coord_list_o = [self.grid.track_to_coord(top_layer_o, tidx) for tidx in tidx_list_o]
+        else:
+            num_wires_o = len(coord_list_o_override)
+            coord_list_o = list(coord_list_o_override)
+            coord_list_o.sort()
+
+        if coord_list_p_override is None:
+            # Find coord_list_p for co-ordinates of tracks of layers that are parallel to bot_layer
+            coord_list_p = [self.grid.track_to_coord(bot_layer, tidx) for tidx in warr.track_id]
+        else:
+            coord_list_p = list(coord_list_p_override)
+        coord_list_p.sort()
+
+        for _layer in range(bot_layer + 1, top_layer + 1):
+            _dir = self.grid.get_direction(_layer)
+            _w = tr_manager.get_width(_layer, w_type)
+            assert _w >= w_dict[_layer], f'It is not possible to via up because of width={_w} of layer={_layer} ' \
+                                         f'specified by TrackManager.'
+            _mlm = mlm_dict.get(_layer, MinLenMode.MIDDLE)
+            if _dir == bot_dir:
+                if coord_list_p_override is None and len(coord_list_p) > 1:
+                    tidx_l = self.grid.coord_to_track(_layer, coord_list_p[0], RoundMode.NEAREST)
+                    tidx_r = self.grid.coord_to_track(_layer, coord_list_p[-1], RoundMode.NEAREST)
+                    # Divide by 2 for via separation
+                    num_wires_p = tr_manager.get_num_wires_between(_layer, w_type, tidx_l, w_type, tidx_r, w_type) + 2
+                    num_wires_p = max(-(- num_wires_p // 2), 1)
+                    num_avail = len(coord_list_p)
+                    if num_wires_p < num_avail:
+                        # adjust num_wires_p to ensure that vias are formed in a stack
+                        num_wires_p = min(num_wires_p, (num_avail + 1) // 2)
+                        if num_avail % 2 == 0:
+                            if alignment_p > 0:
+                                tidx_l = self.grid.coord_to_track(_layer, coord_list_p[1], RoundMode.NEAREST)
+                            else:
+                                tidx_r = self.grid.coord_to_track(_layer, coord_list_p[-2], RoundMode.NEAREST)
+                    else:  # num_wires_p >= num_avail:
+                        # use entire coord_list_p
+                        num_wires_p = num_avail
+                    _tidx_list = tr_manager.spread_wires(_layer, [w_type] * num_wires_p, tidx_l, tidx_r,
+                                                         (w_type, w_type),
+                                                         alignment=0)
+                    _num = num_wires_p
+                else:
+                    _num = len(coord_list_p)
+                    _tidx_list = [self.grid.coord_to_track(_layer, coord, RoundMode.NEAREST) for coord in coord_list_p]
+            else:
+                _tidx_list = [self.grid.coord_to_track(_layer, coord, RoundMode.NEAREST) for coord in coord_list_o]
+                _num = num_wires_o
+            sep = _tidx_list[1] - _tidx_list[0] if _num > 1 else 0
+            # TODO: support non-uniformly spaced list of WireArrays
+            warr = self.connect_to_tracks(warr, TrackID(_layer, _tidx_list[0], _w, num=_num, pitch=sep),
+                                          min_len_mode=_mlm)
+            ret_warr_dict[_layer] = warr
+
+        return warr
+
+    @property
+    def has_guard_ring(self) -> bool:
+        return self._grid.tech_info.has_guard_ring
 
 
 def _update_device_fill_area(lookup: RTree, ed: Param, inst_box: BBox, inst_edges: TemplateEdgeInfo,

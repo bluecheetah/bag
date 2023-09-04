@@ -48,7 +48,7 @@ This module defines SimAccess, which provides methods to run simulations
 and retrieve results.
 """
 
-from typing import Dict, Any, Tuple, Union, Sequence
+from typing import Mapping, Any, Tuple, Union, Sequence, Dict, Type
 
 import abc
 from pathlib import Path
@@ -57,6 +57,7 @@ from pybag.enum import DesignOutput
 from pybag.core import get_cdba_name_bits
 
 from ..concurrent.core import SubProcessManager, batch_async_task
+from ..util.importlib import import_class
 from .data import SimNetlistInfo, SimData
 
 
@@ -87,11 +88,11 @@ class SimAccess(abc.ABC):
     ----------
     parent : str
         parent directory for SimAccess.
-    sim_config : Dict[str, Any]
+    sim_config : Mapping[str, Any]
         the simulation configuration dictionary.
     """
 
-    def __init__(self, parent: str, sim_config: Dict[str, Any]) -> None:
+    def __init__(self, parent: str, sim_config: Mapping[str, Any]) -> None:
         self._config = sim_config
         self._dir_path = (Path(parent) / "simulations").resolve()
 
@@ -147,7 +148,7 @@ class SimAccess(abc.ABC):
         return self._dir_path
 
     @property
-    def config(self) -> Dict[str, Any]:
+    def config(self) -> Mapping[str, Any]:
         """Dict[str, Any]: simulation configurations."""
         return self._config
 
@@ -167,12 +168,110 @@ class SimProcessManager(SimAccess, abc.ABC):
         the simulation configuration dictionary.
     """
 
-    def __init__(self, tmp_dir: str, sim_config: Dict[str, Any]) -> None:
+    def __init__(self, tmp_dir: str, sim_config: Mapping[str, Any]) -> None:
         SimAccess.__init__(self, tmp_dir, sim_config)
 
+        mgr_class: Type[SubProcessManager] = import_class(sim_config.get('mgr_class', SubProcessManager))
+        mgr_kwargs: Dict[str, Any] = sim_config.get('mgr_kwargs', {})
+
         cancel_timeout = sim_config.get('cancel_timeout_ms', 10000) / 1e3
-        self._manager = SubProcessManager(max_workers=sim_config.get('max_workers', 0),
-                                          cancel_timeout=cancel_timeout)
+
+        self._manager: SubProcessManager = mgr_class(max_workers=sim_config.get('max_workers', 0),
+                                                     cancel_timeout=cancel_timeout, **mgr_kwargs)
+
+    @property
+    def manager(self) -> SubProcessManager:
+        return self._manager
+
+
+class EmSimAccess(abc.ABC):
+    """A class that interacts with an EM simulator.
+
+    Parameters
+    ----------
+    parent : str
+        parent directory for EmSimAccess.
+    sim_config : Mapping[str, Any]
+        the simulation configuration dictionary.
+    """
+
+    def __init__(self, parent: str, sim_config: Mapping[str, Any]) -> None:
+        self._config = sim_config
+        self._dir_path = (Path(parent) / "em_simulations").resolve()
+
+    @property
+    def dir_path(self) -> Path:
+        """Path: the directory for simulation files."""
+        return self._dir_path
+
+    @property
+    def config(self) -> Mapping[str, Any]:
+        """Mapping[str, Any]: simulation configurations."""
+        return self._config
+
+    @staticmethod
+    def _get_em_base_path(root_path: Path) -> Path:
+        return root_path.resolve() / 'em_meas'
+
+    def get_log_path(self, root_path: Path) -> Path:
+        """Path: the directory for simulation files."""
+        return self._get_em_base_path(root_path) / 'bag_em.log'
+
+    @abc.abstractmethod
+    async def async_gen_nport(self, cell_name: str, gds_file: Path, params: Mapping[str, Any], root_path: Path,
+                              run_sim: bool = False) -> Path:
+        """A coroutine for running EM sim to generate nport for the current module.
+
+        Parameters
+        ----------
+        cell_name : str
+            Name of the cell
+        gds_file : Path
+            location of the gds file of the cell
+        params : Mapping[str, Any]
+            various EM parameters
+        root_path : Path
+            Root path for running sims and storing results
+        run_sim : bool
+            True to run EM sim; False by default
+
+        Returns
+        -------
+        sp_file: Path
+            location of generated s parameter file
+        """
+        pass
+
+    def run_simulation(self, cell_name: str, gds_file: Path, params: Mapping[str, Any], root_path: Path) -> None:
+        coro = self.async_gen_nport(cell_name, gds_file, params, root_path, run_sim=True)
+        batch_async_task([coro])
+
+    @abc.abstractmethod
+    def process_output(self, cell_name: str, params: Mapping[str, Any], root_path: Path) -> None:
+        pass
+
+
+class EmSimProcessManager(EmSimAccess, abc.ABC):
+    """An implementation of :class:`EmSimAccess` using :class:`SubProcessManager`.
+
+    Parameters
+    ----------
+    tmp_dir : str
+        temporary file directory for EmSimAccess.
+    sim_config : Mapping[str, Any]
+        the simulation configuration dictionary.
+    """
+
+    def __init__(self, tmp_dir: str, sim_config: Mapping[str, Any]) -> None:
+        EmSimAccess.__init__(self, tmp_dir, sim_config)
+
+        mgr_class: Type[SubProcessManager] = import_class(sim_config.get('mgr_class', SubProcessManager))
+        mgr_kwargs: Dict[str, Any] = sim_config.get('mgr_kwargs', {})
+
+        cancel_timeout = sim_config.get('cancel_timeout_ms', 10000) / 1e3
+
+        self._manager: SubProcessManager = mgr_class(max_workers=sim_config.get('max_workers', 0),
+                                                     cancel_timeout=cancel_timeout, **mgr_kwargs)
 
     @property
     def manager(self) -> SubProcessManager:
